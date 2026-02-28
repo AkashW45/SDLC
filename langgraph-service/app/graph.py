@@ -2,6 +2,7 @@ import os
 import json
 import time
 import uuid
+import requests
 import datetime
 from typing import TypedDict
 
@@ -132,6 +133,11 @@ def compute_risk(output: ExpansionOutput) -> float:
         if severity in SEVERITY_WEIGHTS:
             score += SEVERITY_WEIGHTS[severity]
 
+    for threat in output.threats:
+        severity = threat.severity.lower()
+        if severity in SEVERITY_WEIGHTS:
+           score += SEVERITY_WEIGHTS[severity]        
+
     return min(score, 1.0)
 
 
@@ -151,6 +157,50 @@ def risk_compute_node(state: GraphState):
     }
 
 
+def governance_node(state: GraphState):
+    data = dict(state["final"])
+
+    maturity = 1
+    strengths = []
+    gaps = []
+
+    # Compliance signal
+    if "PCI-DSS" in data.get("compliance_tags", []):
+        maturity += 1
+        strengths.append("PCI-DSS compliance defined")
+    else:
+        gaps.append("No formal compliance framework")
+
+    # MFA
+    if any("multi" in sr["description"].lower() for sr in data["security_requirements"]):
+        maturity += 1
+        strengths.append("Administrative MFA enforced")
+    else:
+        gaps.append("Missing MFA enforcement")
+
+    # Monitoring
+    if any("monitor" in comp["name"].lower() for comp in data["architecture"]):
+        maturity += 1
+        strengths.append("Operational monitoring defined")
+    else:
+        gaps.append("No monitoring layer")
+
+    # Logging
+    if any("audit" in sr["description"].lower() for sr in data["security_requirements"]):
+        maturity += 1
+        strengths.append("Audit logging defined")
+    else:
+        gaps.append("Audit logging not enforced")
+
+    maturity = min(maturity, 5)
+
+    data["governance"] = {
+        "maturity_level": maturity,
+        "strengths": strengths,
+        "gaps": gaps
+    }
+
+    return {"final": data}
 # ----------------------------
 # Audit Logging
 # ----------------------------
@@ -167,6 +217,19 @@ def log_audit(requirement: str, result: dict):
         f.write(json.dumps(record) + "\n")
 
 
+
+def orchestration_node(state: GraphState):
+    data = state["final"]
+
+    webhook_url = os.getenv("N8N_WEBHOOK_URL")
+
+    if webhook_url:
+        try:
+            requests.post(webhook_url, json=data, timeout=5)
+        except Exception as e:
+            print("Failed to call n8n:", e)
+
+    return {"final": data}
 # ----------------------------
 # Node 4: Audit
 # ----------------------------
@@ -178,6 +241,53 @@ def audit_node(state: GraphState):
     }
 
 
+def threat_model_node(state: GraphState):
+    data = dict(state["enriched"])
+
+    prompt = f"""
+You are a security architect.
+
+Perform STRIDE threat modeling.
+
+Return ONLY a JSON array.
+
+Example:
+[
+  {{
+    "category": "Spoofing",
+    "description": "...",
+    "severity": "High"
+  }}
+]
+
+No explanation.
+No wrapper object.
+Only the array.
+"""
+
+    raw = call_llm(prompt)
+
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        parsed = []
+
+    # If model wrapped it
+    if isinstance(parsed, dict):
+        if "threats" in parsed:
+            parsed = parsed["threats"]
+        else:
+            parsed = []
+
+    if not isinstance(parsed, list):
+        parsed = []
+
+    data["threats"] = parsed
+
+    return {"enriched": data}
+
+
+
 # ----------------------------
 # Build Graph
 # ----------------------------
@@ -187,14 +297,20 @@ def build_graph():
 
     builder.add_node("expand", expand_node)
     builder.add_node("compliance_enrich", compliance_enrich_node)
+    builder.add_node("threat_model", threat_model_node)
     builder.add_node("risk_compute", risk_compute_node)
+    builder.add_node("governance", governance_node)
+    builder.add_node("orchestration", orchestration_node)
     builder.add_node("audit", audit_node)
 
     builder.set_entry_point("expand")
 
     builder.add_edge("expand", "compliance_enrich")
-    builder.add_edge("compliance_enrich", "risk_compute")
-    builder.add_edge("risk_compute", "audit")
+    builder.add_edge("compliance_enrich", "threat_model")
+    builder.add_edge("threat_model", "risk_compute")
+    builder.add_edge("risk_compute", "governance")
+    builder.add_edge("governance", "orchestration")
+    builder.add_edge("orchestration", "audit")
 
     builder.set_finish_point("audit")
 
