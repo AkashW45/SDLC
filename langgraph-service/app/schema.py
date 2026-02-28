@@ -18,9 +18,15 @@ class PRD(BaseModel):
     non_functional_requirements: List[str]
     assumptions: List[str]
 
+class Threat(BaseModel):
+    category: str
+    description: str
+    severity: str
+
 class ExpansionOutput(BaseModel):
     prd: PRD
     architecture: List[ArchitectureComponent]
     security_requirements: List[SecurityRequirement]
     compliance_tags: List[str]
     risk_score: float | None = None
+    threats: List[Threat] = []
