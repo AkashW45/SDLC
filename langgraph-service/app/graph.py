@@ -2,30 +2,29 @@ import os
 import json
 import time
 import uuid
-import requests
 import datetime
 from typing import TypedDict
 
 from openai import OpenAI, RateLimitError
 from langgraph.graph import StateGraph
-from .schema import ExpansionOutput
-from .prompts import system_prompt
 
 
-# ----------------------------
+# ==========================================================
 # Graph State
-# ----------------------------
+# ==========================================================
 
 class GraphState(TypedDict, total=False):
     requirement: str
-    expanded: dict
-    enriched: dict
-    final: dict
+    blueprint: dict
+    artifacts: dict
+    risk_score: float
+    governance: dict
+    enforcement: dict
 
 
-# ----------------------------
-# OpenAI Client (No global side effects)
-# ----------------------------
+# ==========================================================
+# OpenAI Client
+# ==========================================================
 
 def get_client():
     return OpenAI(
@@ -34,15 +33,13 @@ def get_client():
     )
 
 
-# ----------------------------
-# LLM Call
-# ----------------------------
+# ==========================================================
+# Generic LLM JSON Caller
+# ==========================================================
 
-
-
-def call_llm(requirement: str):
+def call_llm_json(system_prompt: str, user_prompt: str):
     max_retries = 3
-    client = get_client()   # ← THIS LINE FIXES IT
+    client = get_client()
 
     for attempt in range(max_retries):
         try:
@@ -50,267 +47,211 @@ def call_llm(requirement: str):
                 model="gpt-oss-120b",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": requirement}
+                    {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.2,
                 response_format={"type": "json_object"}
             )
 
-            return response.choices[0].message.content
+            return json.loads(response.choices[0].message.content)
 
         except RateLimitError:
             wait = 2 ** attempt
-            print(f"Rate limited. Retrying in {wait} seconds...")
+            print(f"Rate limited. Retrying in {wait}s")
             time.sleep(wait)
 
-    raise Exception("LLM failed after retries.")
+    raise Exception("LLM failed after retries")
 
 
-# ----------------------------
-# Node 1: Expand Requirement
-# ----------------------------
+# ==========================================================
+# PASS 1 — SDLC Blueprint Node
+# ==========================================================
 
-def expand_node(state: GraphState):
-    raw_output = call_llm(state["requirement"])
-    parsed = json.loads(raw_output)
+def sdlc_plan_node(state: GraphState):
 
-    validated = ExpansionOutput.model_validate(parsed)
+    system_prompt = """
+You are a senior enterprise solution architect.
 
-    return {
-        "expanded": validated.model_dump()
-    }
+Given a product requirement, produce a structured SDLC blueprint.
+
+Respond ONLY in JSON with this structure:
+
+{
+  "business_context": {},
+  "system_overview": {},
+  "high_level_architecture": {
+      "components": [],
+      "interactions": []
+  },
+  "data_entities": [],
+  "risk_indicators": [],
+  "complexity_score": 0.0,
+  "compliance_flags": []
+}
+"""
+
+    user_prompt = f"""
+Requirement:
+{state["requirement"]}
+"""
+
+    blueprint = call_llm_json(system_prompt, user_prompt)
+
+    return {"blueprint": blueprint}
 
 
-# ----------------------------
-# Node 2: Compliance Enrichment
-# ----------------------------
+# ==========================================================
+# PASS 2 — Artifact Generation Node
+# ==========================================================
 
-def compliance_enrich_node(state: GraphState):
-    data = dict(state["expanded"])  # prevent mutation
+def sdlc_build_node(state: GraphState):
 
-    tags = set(data["compliance_tags"])
+    system_prompt = """
+You are an AI SDLC compiler.
 
-    # Deterministic compliance inference example
-    if "credit" in state["requirement"].lower():
-        tags.add("PCI-DSS")
+Given a structured system blueprint, generate full SDLC artifacts.
 
-    data["compliance_tags"] = list(tags)
+Respond ONLY in JSON:
 
-    return {
-        "enriched": data
-    }
+{
+  "brd": {},
+  "prd": {},
+  "technical_architecture": {},
+  "mermaid_diagram": "",
+  "data_model_sql": "",
+  "sprint_plan": [],
+  "code_bundle": {
+      "backend": "",
+      "frontend": "",
+      "database": ""
+  },
+  "test_suite": "",
+  "release_runbook": "",
+  "deployment_plan": {}
+}
+"""
+
+    user_prompt = f"""
+Blueprint:
+{json.dumps(state["blueprint"], indent=2)}
+"""
+
+    artifacts = call_llm_json(system_prompt, user_prompt)
+
+    return {"artifacts": artifacts}
 
 
-# ----------------------------
+# ==========================================================
 # Deterministic Risk Engine
-# ----------------------------
-
-SEVERITY_WEIGHTS = {
-    "critical": 0.3,
-    "high": 0.2,
-    "medium": 0.1,
-    "low": 0.05
-}
-
-COMPLIANCE_WEIGHTS = {
-    "PCI-DSS": 0.4,
-    "GDPR": 0.2,
-    "HIPAA": 0.3
-}
-
-
-def compute_risk(output: ExpansionOutput) -> float:
-    score = 0.0
-
-    # Compliance-based risk
-    for tag in output.compliance_tags:
-        if tag in COMPLIANCE_WEIGHTS:
-            score += COMPLIANCE_WEIGHTS[tag]
-
-    # Security severity-based risk
-    for sec in output.security_requirements:
-        severity = sec.severity.lower()
-        if severity in SEVERITY_WEIGHTS:
-            score += SEVERITY_WEIGHTS[severity]
-
-    for threat in output.threats:
-        severity = threat.severity.lower()
-        if severity in SEVERITY_WEIGHTS:
-           score += SEVERITY_WEIGHTS[severity]        
-
-    return min(score, 1.0)
-
-
-# ----------------------------
-# Node 3: Risk Computation
-# ----------------------------
+# ==========================================================
 
 def risk_compute_node(state: GraphState):
-    data = state["enriched"]
 
-    output = ExpansionOutput.model_validate(data)
+    blueprint = state["blueprint"]
 
-    output.risk_score = compute_risk(output)
+    score = 0.0
 
-    return {
-        "final": output.model_dump()
-    }
+    # Compliance risk weight
+    if "PCI-DSS" in blueprint.get("compliance_flags", []):
+        score += 0.4
 
+    if "GDPR" in blueprint.get("compliance_flags", []):
+        score += 0.2
+
+    # Complexity factor
+    score += blueprint.get("complexity_score", 0.0) * 0.3
+
+    score = min(score, 1.0)
+
+    return {"risk_score": score}
+
+
+# ==========================================================
+# Governance Node
+# ==========================================================
 
 def governance_node(state: GraphState):
-    data = dict(state["final"])
 
-    maturity = 1
-    strengths = []
-    gaps = []
+    maturity = 3
 
-    # Compliance signal
-    if "PCI-DSS" in data.get("compliance_tags", []):
-        maturity += 1
-        strengths.append("PCI-DSS compliance defined")
-    else:
-        gaps.append("No formal compliance framework")
+    if state["risk_score"] > 0.8:
+        maturity = 2
 
-    # MFA
-    if any("multi" in sr["description"].lower() for sr in data["security_requirements"]):
-        maturity += 1
-        strengths.append("Administrative MFA enforced")
-    else:
-        gaps.append("Missing MFA enforcement")
-
-    # Monitoring
-    if any("monitor" in comp["name"].lower() for comp in data["architecture"]):
-        maturity += 1
-        strengths.append("Operational monitoring defined")
-    else:
-        gaps.append("No monitoring layer")
-
-    # Logging
-    if any("audit" in sr["description"].lower() for sr in data["security_requirements"]):
-        maturity += 1
-        strengths.append("Audit logging defined")
-    else:
-        gaps.append("Audit logging not enforced")
-
-    maturity = min(maturity, 5)
-
-    data["governance"] = {
+    governance = {
         "maturity_level": maturity,
-        "strengths": strengths,
-        "gaps": gaps
+        "review_required": state["risk_score"] > 0.7
     }
 
-    return {"final": data}
-# ----------------------------
-# Audit Logging
-# ----------------------------
+    return {"governance": governance}
 
-def log_audit(requirement: str, result: dict):
+
+# ==========================================================
+# Enforcement Node
+# ==========================================================
+
+def enforcement_node(state: GraphState):
+
+    actions = []
+
+    if state["risk_score"] >= 0.8:
+        actions.append("CREATE_JIRA")
+
+    if state["governance"]["review_required"]:
+        actions.append("ARCHITECT_REVIEW")
+
+    enforcement = {
+        "actions": actions,
+        "approved_for_deployment": len(actions) == 0
+    }
+
+    return {"enforcement": enforcement}
+
+
+# ==========================================================
+# Audit Logging
+# ==========================================================
+
+def log_audit(state: GraphState):
+
     record = {
         "id": str(uuid.uuid4()),
         "timestamp": datetime.datetime.utcnow().isoformat(),
-        "requirement": requirement,
-        "result": result
+        "requirement": state["requirement"],
+        "risk_score": state["risk_score"],
+        "governance": state["governance"],
+        "enforcement": state["enforcement"]
     }
 
     with open("audit_log.jsonl", "a") as f:
         f.write(json.dumps(record) + "\n")
 
 
-
-def orchestration_node(state: GraphState):
-    data = state["final"]
-
-    webhook_url = os.getenv("N8N_WEBHOOK_URL")
-
-    if webhook_url:
-        try:
-            requests.post(webhook_url, json=data, timeout=5)
-        except Exception as e:
-            print("Failed to call n8n:", e)
-
-    return {"final": data}
-# ----------------------------
-# Node 4: Audit
-# ----------------------------
-
 def audit_node(state: GraphState):
-    log_audit(state["requirement"], state["final"])
-    return {
-        "final": state["final"]
-    }
+    log_audit(state)
+    return state
 
 
-def threat_model_node(state: GraphState):
-    data = dict(state["enriched"])
-
-    prompt = f"""
-You are a security architect.
-
-Perform STRIDE threat modeling.
-
-Return ONLY a JSON array.
-
-Example:
-[
-  {{
-    "category": "Spoofing",
-    "description": "...",
-    "severity": "High"
-  }}
-]
-
-No explanation.
-No wrapper object.
-Only the array.
-"""
-
-    raw = call_llm(prompt)
-
-    try:
-        parsed = json.loads(raw)
-    except Exception:
-        parsed = []
-
-    # If model wrapped it
-    if isinstance(parsed, dict):
-        if "threats" in parsed:
-            parsed = parsed["threats"]
-        else:
-            parsed = []
-
-    if not isinstance(parsed, list):
-        parsed = []
-
-    data["threats"] = parsed
-
-    return {"enriched": data}
-
-
-
-# ----------------------------
+# ==========================================================
 # Build Graph
-# ----------------------------
+# ==========================================================
 
 def build_graph():
     builder = StateGraph(GraphState)
 
-    builder.add_node("expand", expand_node)
-    builder.add_node("compliance_enrich", compliance_enrich_node)
-    builder.add_node("threat_model", threat_model_node)
-    builder.add_node("risk_compute", risk_compute_node)
+    builder.add_node("plan", sdlc_plan_node)
+    builder.add_node("build", sdlc_build_node)
+    builder.add_node("risk", risk_compute_node)
     builder.add_node("governance", governance_node)
-    builder.add_node("orchestration", orchestration_node)
+    builder.add_node("enforce", enforcement_node)
     builder.add_node("audit", audit_node)
 
-    builder.set_entry_point("expand")
+    builder.set_entry_point("plan")
 
-    builder.add_edge("expand", "compliance_enrich")
-    builder.add_edge("compliance_enrich", "threat_model")
-    builder.add_edge("threat_model", "risk_compute")
-    builder.add_edge("risk_compute", "governance")
-    builder.add_edge("governance", "orchestration")
-    builder.add_edge("orchestration", "audit")
+    builder.add_edge("plan", "build")
+    builder.add_edge("build", "risk")
+    builder.add_edge("risk", "governance")
+    builder.add_edge("governance", "enforce")
+    builder.add_edge("enforce", "audit")
 
     builder.set_finish_point("audit")
 
