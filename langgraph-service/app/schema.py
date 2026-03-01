@@ -23,6 +23,26 @@ class Threat(BaseModel):
     description: str
     severity: str
 
+from pydantic import BaseModel
+from typing import List, Optional, Literal
+
+
+class DiagramNode(BaseModel):
+    id: str
+    label: str
+
+
+class DiagramEdge(BaseModel):
+    source: str
+    target: str
+    label: Optional[str] = None
+
+
+class DiagramMetadata(BaseModel):
+    direction: Literal["LR", "TB"]
+    nodes: List[DiagramNode]
+    edges: List[DiagramEdge]    
+
 class ExpansionOutput(BaseModel):
     prd: PRD
     architecture: List[ArchitectureComponent]

@@ -14,5 +14,11 @@ Rules:
 - Do not rename fields
 - Do not omit required fields
 - risk_score must be between 0 and 1
+- mermaid_diagram must be raw Mermaid syntax
+- mermaid_diagram must:
+    - Start directly with graph TB
+    - NOT include ``` markdown fences
+    - NOT include explanation
+    - NOT include comments
 - Return JSON only
 """
