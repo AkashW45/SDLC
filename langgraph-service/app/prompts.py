@@ -20,5 +20,11 @@ Rules:
     - NOT include ``` markdown fences
     - NOT include explanation
     - NOT include comments
+architecture_graph must:
+- include all services as nodes
+- include zone classification
+- include explicit edges
+- use stable IDs (lowercase_snake_case)
+-mermaid_diagram will be generated later — do NOT hallucinate topology.    
 - Return JSON only
 """

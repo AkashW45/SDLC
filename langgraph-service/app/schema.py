@@ -27,25 +27,29 @@ from pydantic import BaseModel
 from typing import List, Optional, Literal
 
 
-class DiagramNode(BaseModel):
+   
+
+from typing import Literal
+
+class ArchitectureNode(BaseModel):
     id: str
-    label: str
+    name: str
+    type: Literal["service", "database", "external", "edge", "pci", "infra"]
+    zone: Literal["external", "dmz", "core", "pci", "observability"]
 
-
-class DiagramEdge(BaseModel):
+class ArchitectureEdge(BaseModel):
     source: str
     target: str
-    label: Optional[str] = None
+    protocol: str  # REST | gRPC | Kafka | JDBC etc.
 
-
-class DiagramMetadata(BaseModel):
-    direction: Literal["LR", "TB"]
-    nodes: List[DiagramNode]
-    edges: List[DiagramEdge]    
+class ArchitectureGraph(BaseModel):
+    nodes: List[ArchitectureNode]
+    edges: List[ArchitectureEdge]    
 
 class ExpansionOutput(BaseModel):
     prd: PRD
     architecture: List[ArchitectureComponent]
+    architecture_graph: ArchitectureGraph   # <-- ADD THIS
     security_requirements: List[SecurityRequirement]
     compliance_tags: List[str]
     risk_score: float | None = None
