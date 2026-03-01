@@ -63,31 +63,61 @@ def call_llm_json(system_prompt: str, user_prompt: str):
     raise Exception("LLM failed after retries")
 
 
+
 # ==========================================================
 # PASS 1 — SDLC Blueprint Node
 # ==========================================================
 
 def sdlc_plan_node(state: GraphState):
 
-    system_prompt = """
+    system_prompt = system_prompt = """
 You are a senior enterprise solution architect.
 
 Given a product requirement, produce a structured SDLC blueprint.
 
-Respond ONLY in JSON with this structure:
+Respond ONLY in strict JSON with EXACTLY this structure:
 
 {
-  "business_context": {},
-  "system_overview": {},
-  "high_level_architecture": {
-      "components": [],
-      "interactions": []
+  "business_context": {
+    "summary": ""
   },
-  "data_entities": [],
+  "system_overview": {
+    "purpose": "",
+    "scope": ""
+  },
+  "high_level_architecture": {
+    "components": [
+      {
+        "name": "",
+        "type": "",
+        "description": ""
+      }
+    ],
+    "interactions": [
+      {
+        "source": "",
+        "target": "",
+        "protocol": ""
+      }
+    ]
+  },
+  "data_entities": [
+    {
+      "name": "",
+      "description": ""
+    }
+  ],
   "risk_indicators": [],
   "complexity_score": 0.0,
   "compliance_flags": []
 }
+
+Rules:
+- components MUST be objects (not strings)
+- interactions MUST reference component names exactly
+- Do NOT add extra fields
+- Do NOT rename fields
+- Return JSON only
 """
 
     user_prompt = f"""
@@ -137,6 +167,13 @@ Blueprint:
 """
 
     artifacts = call_llm_json(system_prompt, user_prompt)
+    from .diagram_generator import generate_mermaid_from_graph
+
+    architecture_graph = state["blueprint"]["high_level_architecture"]
+
+    deterministic_mermaid = generate_mermaid_from_graph(architecture_graph)
+
+    artifacts["mermaid_diagram"] = deterministic_mermaid
 
     return {"artifacts": artifacts}
 
