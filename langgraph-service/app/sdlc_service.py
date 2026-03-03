@@ -275,15 +275,52 @@ def deterministic_architecture_plan(architecture: dict) -> dict:
 
 
 
-def build_sprint_plan(canonical: dict, architecture: dict, jira_meta: dict) -> dict:
+
+def to_adf(text: str) -> dict:
+    return {
+        "type": "doc",
+        "version": 1,
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": text or ""
+                    }
+                ]
+            }
+        ],
+    }
+
+
+def wrap_tickets_with_adf(sprint_plan: dict) -> dict:
+    for ticket in sprint_plan.get("tickets", []):
+        fields = ticket.get("fields", {})
+        raw_desc = fields.get("description")
+
+        # If already valid ADF, leave it
+        if isinstance(raw_desc, dict) and raw_desc.get("type") == "doc":
+            continue
+
+        # Convert string or None to ADF
+        fields["description"] = to_adf(str(raw_desc or ""))
+
+    return sprint_plan
+
+def build_sprint_plan(
+    canonical: dict,
+    architecture: dict,
+    jira_meta: dict,
+    project_key: str
+) -> dict:
     """
     Returns Jira-ready tickets using metadata-driven mapping.
     """
     
-
-    project_id = jira_meta["project_id"]
     issue_types = jira_meta["issue_types"]  # dict by name
     priorities = jira_meta["priorities"]    # dict by name
+    story_points_field = jira_meta.get("dynamic_fields", {}).get("story_points")
 
     flat_tickets = []
 
@@ -299,7 +336,7 @@ def build_sprint_plan(canonical: dict, architecture: dict, jira_meta: dict) -> d
 
             flat_tickets.append({
                 "fields": {
-                    "project": {"id": project_id},
+                    "project": {"key": project_key},
                     "summary": epic["title"],
                     "description": epic["description"],
                     "issuetype": {"id": issue_types["Epic"]},
@@ -309,17 +346,21 @@ def build_sprint_plan(canonical: dict, architecture: dict, jira_meta: dict) -> d
             })
 
             for story in epic.get("stories", []):
-                flat_tickets.append({
-                    "fields": {
-                        "project": {"id": project_id},
-                        "summary": story["title"],
-                        "description": story["description"],
-                        "issuetype": {"id": issue_types["Story"]},
-                        "priority": {"id": priorities["Medium"]},
-                        "labels": ["product"],
-                        "custom_story_points": story.get("story_points")
-                    }
-                })
+
+               fields = {
+        "project": {"key": project_key},
+        "summary": story["title"],
+        "description": story["description"],
+        "issuetype": {"id": issue_types["Story"]},
+        "priority": {"id": priorities["Medium"]},
+        "labels": ["product"]
+    }
+
+         # ✅ Dynamically attach story points if field exists
+               if story_points_field and story.get("story_points") is not None:
+                  fields[story_points_field] = story.get("story_points")
+
+               flat_tickets.append({"fields": fields})
 
     except Exception as e:
         print("LLM planning failed:", e)
@@ -331,7 +372,7 @@ def build_sprint_plan(canonical: dict, architecture: dict, jira_meta: dict) -> d
 
         flat_tickets.append({
             "fields": {
-                "project": {"id": project_id},
+                "project": {"key": project_key},
                 "summary": epic["title"],
                 "description": f"Derived from architecture node {epic['derived_from_node']}",
                 "issuetype": {"id": issue_types["Epic"]},
@@ -343,7 +384,7 @@ def build_sprint_plan(canonical: dict, architecture: dict, jira_meta: dict) -> d
         for ticket in epic.get("tickets", []):
             flat_tickets.append({
                 "fields": {
-                    "project": {"id": project_id},
+                    "project": {"key": project_key},
                     "summary": ticket["description"],
                     "description": ticket["description"],
                     "issuetype": {"id": issue_types[ticket["type"]]},
@@ -353,7 +394,7 @@ def build_sprint_plan(canonical: dict, architecture: dict, jira_meta: dict) -> d
             })
 
     return {
-        "project": project_id,
+        "project": project_key,
         "sprint_duration": "2 weeks",
         "tickets": flat_tickets
     }

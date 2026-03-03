@@ -8,7 +8,7 @@ from .sdlc_service import generate_architecture_from_prd
 from .sdlc_service import canonicalize_prd
 from .diagram_generator import generate_mermaid_from_architecture
 from .diagram_renderer import render_mermaid_to_png
-from .sdlc_service import generate_blueprint, generate_prd_from_blueprint, build_sprint_plan
+from .sdlc_service import generate_blueprint, generate_prd_from_blueprint, build_sprint_plan, wrap_tickets_with_adf
 from .jira_client import fetch_jira_metadata
 
 router = APIRouter()
@@ -79,9 +79,16 @@ def generate_sprint_plan(data: SprintPlanInput):
     jira_meta = fetch_jira_metadata(data.project_key)
 
     # Step 4: build sprint plan
-    sprint_plan = build_sprint_plan(canonical, architecture, jira_meta)
+    sprint_plan = build_sprint_plan(
+    canonical,
+    architecture,
+    jira_meta,
+    data.project_key
+    )
+
+    sprint_plan = wrap_tickets_with_adf(sprint_plan)
 
     return {
-        "status": "SPRINT_PLAN_GENERATED",
-        "sprint_plan": sprint_plan
-    }
+    "status": "SPRINT_PLAN_GENERATED",
+    "sprint_plan": sprint_plan
+}
