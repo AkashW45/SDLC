@@ -3,13 +3,13 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
 from typing import Dict
-from .schema import PRD
-from .sdlc_service import generate_architecture_from_prd
-from .sdlc_service import canonicalize_prd
-from .diagram_generator import generate_mermaid_from_architecture
-from .diagram_renderer import render_mermaid_to_png
-from .sdlc_service import generate_blueprint, generate_prd_from_blueprint, build_sprint_plan, wrap_tickets_with_adf
-from .jira_client import fetch_jira_metadata
+from app.core.schema import PRD
+from app.services.sdlc_service import generate_architecture_from_prd
+from app.services.sdlc_service import canonicalize_prd
+from app.models.diagram_generator import generate_mermaid_from_architecture
+from app.models.diagram_renderer import render_mermaid_to_png
+from app.services.sdlc_service import generate_blueprint, generate_prd_from_blueprint, build_sprint_plan, wrap_tickets_with_adf
+from app.core.jira_client import fetch_jira_metadata
 
 router = APIRouter()
 
