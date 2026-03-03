@@ -3,7 +3,7 @@ import os
 import json
 # sdlc_service.py
 
-from .sprint_planner import generate_sprint_plan
+from app.api.sprint_planner import generate_sprint_plan
 
 import requests
 
