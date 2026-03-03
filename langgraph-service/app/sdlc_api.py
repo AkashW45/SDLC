@@ -2,13 +2,14 @@ from fastapi import APIRouter
 from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
-
+from typing import Dict
 from .schema import PRD
 from .sdlc_service import generate_architecture_from_prd
 from .sdlc_service import canonicalize_prd
 from .diagram_generator import generate_mermaid_from_architecture
 from .diagram_renderer import render_mermaid_to_png
-from .sdlc_service import generate_blueprint, generate_prd_from_blueprint
+from .sdlc_service import generate_blueprint, generate_prd_from_blueprint, build_sprint_plan
+from .jira_client import fetch_jira_metadata
 
 router = APIRouter()
 
@@ -55,3 +56,32 @@ def prd_diagram(data: PRDDiagramInput):
     mermaid = generate_mermaid_from_architecture(architecture)
     png_bytes = render_mermaid_to_png(mermaid)
     return Response(content=png_bytes, media_type="image/png")
+
+
+
+class SprintPlanInput(BaseModel):
+    prd: dict
+    project_key: str = "DEV"
+
+
+
+
+@router.post("/sdlc/sprint-plan")
+def generate_sprint_plan(data: SprintPlanInput):
+
+    # Step 1: canonicalize PRD
+    canonical = canonicalize_prd(data.prd, {})
+
+    # Step 2: generate architecture
+    architecture = generate_architecture_from_prd(canonical)
+
+    # Step 3: fetch Jira metadata internally
+    jira_meta = fetch_jira_metadata(data.project_key)
+
+    # Step 4: build sprint plan
+    sprint_plan = build_sprint_plan(canonical, architecture, jira_meta)
+
+    return {
+        "status": "SPRINT_PLAN_GENERATED",
+        "sprint_plan": sprint_plan
+    }
