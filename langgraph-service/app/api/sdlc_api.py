@@ -12,6 +12,8 @@ from app.services.sdlc_service import generate_blueprint, generate_prd_from_blue
 from app.core.jira_client import fetch_jira_metadata
 from app.models.scaffold_models import SprintExecutionRequest
 from app.services.sprint_executor import execute_sprint
+from app.models.scaffold_models import TestGenerationRequest
+from app.services.test_service import generate_and_run_tests
 
 router = APIRouter()
 
@@ -101,3 +103,9 @@ def generate_sprint_plan(data: SprintPlanInput):
 @router.post("/sdlc/execute-sprint")
 def execute_full_sprint(data: SprintExecutionRequest):
     return execute_sprint(data)
+
+
+
+@router.post("/sdlc/generate-tests")
+def generate_tests(data: TestGenerationRequest):
+    return generate_and_run_tests(data)

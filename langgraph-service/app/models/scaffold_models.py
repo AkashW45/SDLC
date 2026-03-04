@@ -26,3 +26,10 @@ class SprintExecutionRequest(BaseModel):
     architecture: dict
 
     mode: Literal["bootstrap", "update", "preview"]= "bootstrap"
+
+class TestGenerationRequest(BaseModel):
+    repo_url: str
+    branch_name: str
+    ticket_id: str
+    acceptance_criteria: list[str]
+    mode: Literal["bootstrap", "update","preview"] = "bootstrap"    
