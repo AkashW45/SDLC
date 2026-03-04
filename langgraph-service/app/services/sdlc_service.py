@@ -1,6 +1,5 @@
 
-import os
-import json
+
 # sdlc_service.py
 
 from app.api.sprint_planner import generate_sprint_plan
@@ -8,29 +7,45 @@ from app.api.sprint_planner import generate_sprint_plan
 import requests
 
 
+
+
+import os
+import json
+import re
 from groq import Groq
 
-
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+
+class LLMOutputError(Exception):
+    pass
+
+
 
 def call_llm(system_prompt: str, user_prompt: str) -> dict:
 
     response = client.chat.completions.create(
         model="openai/gpt-oss-120b",
         temperature=0,
+        response_format={"type": "json_object"},  # <---- FORCE JSON
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
-        ]
+        ],
     )
 
-    raw = response.choices[0].message.content.strip()
+    raw = response.choices[0].message.content
 
-    # Remove markdown fences if model adds them
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
+    if not raw:
+        raise LLMOutputError("LLM returned empty response")
 
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise LLMOutputError(
+            f"Invalid JSON returned by LLM.\nRaw output:\n{raw}"
+        ) from e
+    
 
 def generate_blueprint(requirement: str) -> dict:
 
