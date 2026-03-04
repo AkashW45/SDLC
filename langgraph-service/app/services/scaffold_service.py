@@ -28,12 +28,15 @@ You are a senior software engineer.
 
 Generate ONE complete file for this ticket.
 
-Rules:
-- Use only provided architecture and models
-- Do not invent new models
-- Add TODO comments for acceptance criteria
-- No syntax errors
-- Return JSON only
+STRICT RULES:
+- If identical functionality already exists, return identical content.
+- Do NOT reformat existing code.
+- Do NOT reorder imports.
+- Do NOT change spacing unless required.
+- Use only provided architecture and models.
+- Add TODO comments for acceptance criteria.
+- No syntax errors.
+- Return ONLY valid JSON.
 """
 
     user_prompt = f"""

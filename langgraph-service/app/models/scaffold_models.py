@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import List, Dict, Any
+from typing import Literal
 
 
 class SingleTicketInput(BaseModel):
@@ -15,3 +16,13 @@ class GeneratedFile(BaseModel):
     content: str
     imports_needed: List[str] = []
     todos: List[str] = []
+
+
+
+class SprintExecutionRequest(BaseModel):
+    repo_url: str
+    branch_name: str
+    tickets: list
+    architecture: dict
+
+    mode: Literal["bootstrap", "update", "preview"]= "bootstrap"

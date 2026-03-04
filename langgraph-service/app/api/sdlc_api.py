@@ -10,6 +10,8 @@ from app.models.diagram_generator import generate_mermaid_from_architecture
 from app.models.diagram_renderer import render_mermaid_to_png
 from app.services.sdlc_service import generate_blueprint, generate_prd_from_blueprint, build_sprint_plan, wrap_tickets_with_adf
 from app.core.jira_client import fetch_jira_metadata
+from app.models.scaffold_models import SprintExecutionRequest
+from app.services.sprint_executor import execute_sprint
 
 router = APIRouter()
 
@@ -92,3 +94,10 @@ def generate_sprint_plan(data: SprintPlanInput):
     "status": "SPRINT_PLAN_GENERATED",
     "sprint_plan": sprint_plan
 }
+
+
+
+
+@router.post("/sdlc/execute-sprint")
+def execute_full_sprint(data: SprintExecutionRequest):
+    return execute_sprint(data)
