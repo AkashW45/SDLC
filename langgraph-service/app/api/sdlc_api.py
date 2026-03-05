@@ -14,7 +14,7 @@ from app.models.scaffold_models import SprintExecutionRequest
 from app.services.sprint_executor import execute_sprint
 from app.models.scaffold_models import TestGenerationRequest
 from app.services.test_service import generate_and_run_tests
-from app.services.github import create_pull_request
+from app.services.github import create_pull_request, get_pr_files
 router = APIRouter()
 
 
@@ -125,4 +125,48 @@ def create_pr(data: dict):
 
     return {
         "pr_url": result["html_url"]
+    }
+
+@router.get("/github/pr-files/{pr_number}")
+def get_pr_files_api(pr_number: int):
+
+    files = get_pr_files(pr_number)
+
+    return {
+        "files": files
+    }
+
+@router.post("/runbook/generate")
+def generate_runbook(issue_key: str):
+
+    ticket = get_ticket(issue_key)
+
+    plan = analyze_ticket(ticket)
+
+    return {
+        "ticket": ticket,
+        "plan": plan
+    }
+
+@router.post("/runbook/execute")
+def execute_runbook(ticket: dict, plan: dict):
+
+    executor = RundeckExecutor()
+
+    execution = executor.run(
+        ticket,
+        plan,
+        options={
+            "environment": "QA",
+            "version": ticket["fixVersion"],
+            "dry_run": "false"
+        },
+        context={}
+    )
+
+    execution_url = executor.get_execution_url(execution["id"])
+
+    return {
+        "execution_id": execution["id"],
+        "execution_url": execution_url
     }
