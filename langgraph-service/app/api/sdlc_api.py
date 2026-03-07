@@ -76,6 +76,11 @@ def generate_sprint_plan(data: SprintPlanInput):
     # Step 1: canonicalize PRD
     canonical = canonicalize_prd(data.prd, {})
 
+    if not canonical.get('project_name'):
+        canonical['project_name'] = 'SYSTEM'
+    
+    
+
     # Step 2: generate architecture
     architecture = generate_architecture_from_prd(canonical)
 

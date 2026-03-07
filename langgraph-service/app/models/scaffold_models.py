@@ -31,5 +31,6 @@ class TestGenerationRequest(BaseModel):
     repo_url: str
     branch_name: str
     ticket_id: str
-    acceptance_criteria: list[str]
+    file_patches: list = []
+    acceptance_criteria: list[str]=[]
     mode: Literal["bootstrap", "update","preview"] = "bootstrap"    

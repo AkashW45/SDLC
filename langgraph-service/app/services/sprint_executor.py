@@ -102,6 +102,7 @@ def execute_sprint(data: SprintExecutionRequest):
         manifest["artifacts"].append({
             "ticket_id": ticket.get("id", "UNKNOWN"),
             "file_path": file_path,
+            "acceptance_criteria": ticket.get("acceptance_criteria", []),
             "generated_at": datetime.datetime.utcnow().isoformat() + "Z"
         })
 

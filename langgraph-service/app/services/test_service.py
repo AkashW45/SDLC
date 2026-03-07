@@ -28,20 +28,25 @@ def clone_repo(repo_url: str, branch_name: str) -> str:
     return temp_dir
 
 
-def find_file_for_ticket(repo_path: str, ticket_id: str) -> str:
-    manifest_path = os.path.join(repo_path, "sdlc_manifest.json")
-
-    if not os.path.exists(manifest_path):
-        raise Exception("sdlc_manifest.json not found in repo")
-
-    with open(manifest_path, "r", encoding="utf-8") as f:
-        manifest = json.load(f)
-
-    for artifact in manifest.get("artifacts", []):
-        if artifact["ticket_id"] == ticket_id:
-            return artifact["file_path"]
-
-    raise Exception(f"Ticket {ticket_id} not found in manifest")
+def find_file_for_ticket(repo_path: str, ticket_id: str, file_patches: list = None) -> str:
+    """
+    Use file_patches from PR diff directly instead of sdlc_manifest.json
+    """
+    if file_patches:
+        # Return first non-test, non-config Python file from patches
+        for f in file_patches:
+            fname = f.get("filename", "")
+            if fname.endswith(".py") and "test_" not in fname and fname not in [
+                "setup.py", "conftest.py"
+            ]:
+                full_path = os.path.join(repo_path, fname)
+                return full_path
+        # Fallback - return first patched file
+        if file_patches:
+            return os.path.join(repo_path, file_patches[0].get("filename", ""))
+    
+    # Last resort fallback - don't crash
+    return repo_path
 
 
 # -----------------------------------------
@@ -155,9 +160,17 @@ def extract_coverage(pytest_stdout: str):
 def generate_and_run_tests(data):
 
     repo_path = clone_repo(data.repo_url, data.branch_name)
+    conftest_path = os.path.join(repo_path, "conftest.py")
+    with open(conftest_path, "w") as f:
+         f.write("import sys, os\n")
+         f.write("sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'langgraph-service'))\n")
+
+    pytest_ini = os.path.join(repo_path, "pytest.ini")
+    with open(pytest_ini, "w") as f:
+         f.write("[pytest]\ntestpaths = tests\n")
 
     try:
-        source_file_path = find_file_for_ticket(repo_path, data.ticket_id)
+        source_file_path = find_file_for_ticket(repo_path, data.ticket_id,data.file_patches or [])
 
         with open(os.path.join(repo_path, source_file_path), "r", encoding="utf-8") as f:
             source_code = f.read()

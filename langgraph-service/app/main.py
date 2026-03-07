@@ -1,10 +1,10 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from dotenv import load_dotenv
-import os
 
-load_dotenv()
 
 
 from app.api.sdlc_api import router as sdlc_router

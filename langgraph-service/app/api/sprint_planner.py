@@ -4,11 +4,10 @@ from pydantic import BaseModel, Field, validator
 import os
 import json
 
-from cerebras.cloud.sdk import Cerebras
+from groq import Groq
+import os
 
-
-client = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
-
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # =========================
 # Pydantic Models
@@ -18,6 +17,7 @@ class Story(BaseModel):
     title: str
     description: str
     story_points: int
+    acceptance_criteria: List[str]=[]
 
     @validator("story_points")
     def validate_story_points(cls, v):
@@ -57,6 +57,8 @@ class SprintPlan(BaseModel):
 def extract_modules_from_prd(prd_text: str) -> List[str]:
     prompt = f"""
 Extract main functional modules from this PRD.
+Consolidate everything into exactly 3 broad modules that together cover ALL functionality.
+Do not lose any requirement — every feature must belong to one of the modules
 Return strictly JSON array of module names.
 No explanation.
 
@@ -65,13 +67,13 @@ PRD:
 """
 
     response = client.chat.completions.create(
-        model="gpt-oss-120b",
+        model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2,
     )
 
     content = response.choices[0].message.content.strip()
-
+    
     try:
         modules = json.loads(content)
         if not isinstance(modules, list) or not modules:
@@ -87,14 +89,18 @@ You are a senior Scrum planner.
 
 For module: {module_name}
 
-Generate 3-6 user stories.
+Generate exactly 1 comprehensive user story that covers all work in this module.
 Return strictly JSON array of objects:
 [
-  {{
-    "title": "...",
-    "description": "...",
-    "story_points": integer 1-8
-  }}
+ {{
+   "title": "...",
+   "description": "...",
+   "story_points": 3,
+   "acceptance_criteria": [
+      "criterion 1",
+      "criterion 2"
+   ]
+ }}
 ]
 
 No explanation.
@@ -103,18 +109,48 @@ PRD context:
 """
 
     response = client.chat.completions.create(
-        model="gpt-oss-120b",
+        model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
     )
 
     content = response.choices[0].message.content.strip()
+    
+
+# Strip markdown fences
+    if content.startswith("```"):
+       content = re.sub(r"```(?:json)?", "", content).strip().strip("```").strip()
 
     try:
-        stories_raw = json.loads(content)
-        return [Story(**story) for story in stories_raw]
-    except Exception:
-        raise ValueError(f"Invalid stories generated for module {module_name}")
+        raw_stories = json.loads(content)
+        
+    
+        if not isinstance(raw_stories, list):
+           raw_stories = [raw_stories]
+    
+        stories = []
+        for s in raw_stories:
+            try:
+                stories.append(Story(**s))
+            except Exception as e:
+                
+                print(f"BAD_STORY: {s}")
+            # Add with defaults instead of failing
+                stories.append(Story(
+                title=s.get("title", "Untitled"),
+                description=s.get("description", ""),
+                story_points=min(max(s.get("story_points", 3), 1), 8),
+                acceptance_criteria=s.get("acceptance_criteria", [])
+            ))
+    
+        if not stories:
+           raise ValueError(f"Invalid stories generated for module")
+    
+        return stories
+
+    except json.JSONDecodeError as e:
+           print(f"JSON_PARSE_ERROR: {e}, content: '{content[:200]}'")
+           raise ValueError(f"Invalid stories generated for module")
 
 
 # =========================

@@ -109,7 +109,7 @@ def push_files_to_repo(
         # Commit + push
         run_git(["git", "add", "."], cwd=temp_dir)
         run_git(["git", "commit", "-m", commit_message], cwd=temp_dir)
-        run_git(["git", "push", "origin", branch_name], cwd=temp_dir)
+        run_git(["git", "push", "origin", branch_name, "--force"], cwd=temp_dir)
 
         return {
             "status": "PUSH_SUCCESS",

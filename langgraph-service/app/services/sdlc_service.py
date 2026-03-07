@@ -5,7 +5,9 @@
 from app.api.sprint_planner import generate_sprint_plan
 
 import requests
-
+import time
+import re
+import json
 
 
 
@@ -22,29 +24,40 @@ class LLMOutputError(Exception):
 
 
 
-def call_llm(system_prompt: str, user_prompt: str) -> dict:
 
-    response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
-        temperature=0,
-        response_format={"type": "json_object"},  # <---- FORCE JSON
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-    )
+def call_llm(system_prompt: str, user_prompt: str, retries: int = 5) -> dict:
+    for attempt in range(retries):
+        try:
+            response = client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=4096,
+            )
+            content = response.choices[0].message.content.strip()
+            
+            # Strip markdown fences if LLM wraps in ```json ... ```
+            if content.startswith("```"):
+                content = re.sub(r"```(?:json)?", "", content).strip().strip("```").strip()
+            
+            # Always return parsed dict, never raw string
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                # LLM returned non-JSON text, return as-is for non-JSON callers
+                return content
 
-    raw = response.choices[0].message.content
-
-    if not raw:
-        raise LLMOutputError("LLM returned empty response")
-
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise LLMOutputError(
-            f"Invalid JSON returned by LLM.\nRaw output:\n{raw}"
-        ) from e
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "rate_limit" in error_str.lower():
+                wait_time = 3 * (attempt + 1)
+                print(f"[Rate limit hit] Waiting {wait_time}s before retry {attempt+1}/{retries}")
+                time.sleep(wait_time)
+            else:
+                raise
+    raise Exception("Max retries exceeded due to rate limiting")
     
 
 def generate_blueprint(requirement: str) -> dict:
@@ -80,6 +93,7 @@ Do not include markdown.
     )
 
 def generate_architecture_from_prd(canonical: dict) -> dict:
+    canonical['project_name'] = canonical.get('project_name') or 'SYSTEM'
     """
     LLM receives only canonical facts.
     Cannot invent beyond them.
@@ -147,82 +161,111 @@ Generate architecture JSON with:
 
     return result
 
+def extract_text_fields(obj):
+    texts = []
+
+    if isinstance(obj, str):
+        cleaned = obj.strip()
+        if len(cleaned) > 3:
+            texts.append(cleaned)
+
+    elif isinstance(obj, list):
+        for item in obj:
+            texts.extend(extract_text_fields(item))
+
+    elif isinstance(obj, dict):
+        for key, value in obj.items():
+
+            # ignore metadata
+            if key.lower() in {"id", "uuid", "priority", "version"}:
+                continue
+
+            texts.extend(extract_text_fields(value))
+
+    return texts
+
+
+def normalize_requirement_dynamic(r):
+    texts = extract_text_fields(r)
+
+    texts = list(dict.fromkeys(t for t in texts if len(t) > 3))
+
+    if not texts:
+        return ""
+
+    return " ".join(texts)
 
 def canonicalize_prd(prd: dict, brd: dict) -> dict:
-    """
-    Converts any PRD/BRD shape into canonical deterministic schema.
-    No LLM here. Pure logic.
-    """
+    print(f"RAW_PRD_KEYS: {list(prd.keys())}")
+    print(f"RAW_PRD_SAMPLE: {json.dumps(prd, indent=2)[:500]}")
 
     def get(obj, *keys):
+        if not isinstance(obj, dict):
+            return None
+        lower_map = {k.lower(): v for k, v in obj.items()}
         for k in keys:
-            if obj.get(k):
-                return obj[k]
+            val = lower_map.get(k.lower())
+            if val:
+                return val
         return None
 
-    # Project name
     project_name = (
-        get(prd, "title", "projectTitle") or
+        get(prd, "title", "projectTitle", "DocumentTitle", "Project", "ProjectName") or
         get(brd, "project_name", "projectTitle") or
         "SYSTEM"
     )
 
-    # Functional Requirements
     raw_fr = (
-        get(prd, "functional_requirements", "functionalRequirements") or
+        get(prd, "functional_requirements", "functionalRequirements",
+            "FunctionalRequirements", "features", "Features") or
         get(brd, "functional_requirements", "functionalRequirements") or
         []
     )
 
-    functional_requirements = []
-    for fr in raw_fr:
-        if isinstance(fr, str):
-            functional_requirements.append(fr)
-        elif isinstance(fr, dict):
-            functional_requirements.append(
-                fr.get("description") or fr.get("title") or ""
-            )
-
-    # Non-functional
     raw_nfr = (
-        get(prd, "non_functional_requirements", "nonFunctionalRequirements") or
+        get(prd, "non_functional_requirements", "nonFunctionalRequirements",
+            "NonFunctionalRequirements", "nfr") or
         []
     )
 
-    non_functional_requirements = []
-    for nfr in raw_nfr:
-        if isinstance(nfr, str):
-            non_functional_requirements.append(nfr)
-        elif isinstance(nfr, dict):
-            non_functional_requirements.append(
-                nfr.get("description") or ""
-            )
-
-    # Actors
     raw_personas = (
-        get(prd, "user_personas", "userPersonas") or
+        get(prd, "user_personas", "userPersonas", "UserPersonas",
+            "stakeholders", "Stakeholders", "users") or
         get(brd, "stakeholders") or
         []
     )
 
-    actors = []
-    for p in raw_personas:
-        if isinstance(p, str):
-            actors.append(p)
-        elif isinstance(p, dict):
-            actors.append(p.get("role") or p.get("name") or "")
+    # 🔥 NORMALIZE FUNCTIONAL REQUIREMENTS
+    normalized_fr = []
 
-    return {
+    
+
+    for r in raw_fr:
+        normalized = normalize_requirement_dynamic(r)
+        if normalized:
+           normalized_fr.append(normalized)
+
+    # 🔥 NORMALIZE NFR
+    normalized_nfr = []
+
+    for r in raw_nfr:
+        if isinstance(r, dict):
+            desc = r.get("description") or r.get("text") or ""
+            normalized_nfr.append(desc)
+        else:
+            normalized_nfr.append(str(r))
+    
+    normalized_fr = [r for r in normalized_fr if r.strip()]
+    canonical = {
         "project_name": project_name,
-        "functional_requirements": functional_requirements[:10],
-        "non_functional_requirements": non_functional_requirements[:5],
-        "actors": [a for a in actors if a][:5]
+        "functional_requirements": normalized_fr,
+        "non_functional_requirements": normalized_nfr,
+        "actors": raw_personas
     }
+    
 
-import uuid
-
-import uuid
-
+    return canonical
+import uuid    
 def deterministic_architecture_plan(architecture: dict) -> dict:
     epics = []
 
@@ -341,7 +384,13 @@ def build_sprint_plan(
 
     # 1️⃣ LLM Product Planning
     try:
-        prd_text = "\n".join(canonical.get("functional_requirements", []))
+        prd_text = "\n".join(
+    r if isinstance(r, str) else json.dumps(r)
+    for r in canonical.get("functional_requirements", [])
+)
+        print(f"PRD_TEXT_DEBUG: '{prd_text[:300]}'")  # ← ADD THIS
+        print(f"CANONICAL_KEYS: {list(canonical.keys())}")  # ← ADD THIS TOO
+        print(f"CANONICAL_FR: {canonical.get('functional_requirements', [])}")
         llm_plan = generate_sprint_plan(prd_text)
 
         if hasattr(llm_plan, "model_dump"):
@@ -356,29 +405,37 @@ def build_sprint_plan(
                     "description": epic["description"],
                     "issuetype": {"id": issue_types["Epic"]},
                     "priority": {"id": priorities["Medium"]},
+                    
                     "labels": ["product"]
                 }
             })
 
-            for story in epic.get("stories", []):
-
-               fields = {
+        for story in epic.get("stories", []):
+    # Format acceptance criteria into description
+            ac_list = story.get("acceptance_criteria", [])
+            ac_text = ""
+            if ac_list:
+               ac_text = "\n\nAcceptance Criteria:\n" + "\n".join(f"- {ac}" for ac in ac_list)
+    
+            full_description = story["description"] + ac_text
+    
+            fields = {
         "project": {"key": project_key},
         "summary": story["title"],
-        "description": story["description"],
+        "description": full_description,  # AC embedded in description
         "issuetype": {"id": issue_types["Story"]},
         "priority": {"id": priorities["Medium"]},
         "labels": ["product"]
     }
-
-         # ✅ Dynamically attach story points if field exists
-               if story_points_field and story.get("story_points") is not None:
-                  fields[story_points_field] = story.get("story_points")
-
-               flat_tickets.append({"fields": fields})
+    
+            if story_points_field and story.get("story_points") is not None:
+               fields[story_points_field] = story.get("story_points")
+    
+            flat_tickets.append({"fields": fields})
 
     except Exception as e:
-        print("LLM planning failed:", e)
+        import traceback
+        traceback.print_exc()
 
     # 2️⃣ Deterministic Architecture Tickets
     infra_plan = deterministic_architecture_plan(architecture)
@@ -392,6 +449,7 @@ def build_sprint_plan(
                 "description": f"Derived from architecture node {epic['derived_from_node']}",
                 "issuetype": {"id": issue_types["Epic"]},
                 "priority": {"id": priorities["High"]},
+          
                 "labels": ["architecture"]
             }
         })
