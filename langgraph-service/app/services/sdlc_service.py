@@ -79,15 +79,20 @@ Generate a BRD for the following requirement:
     )
 
 def generate_prd_from_blueprint(blueprint: dict) -> dict:
-
     return call_llm(
         system_prompt="""
 You are a Product Owner.
-Generate a detailed PRD from the given BRD.
-Return ONLY valid JSON.
-Return ONLY valid JSON.
-Do not include explanations.
-Do not include markdown.
+Generate a PRD from the given BRD.
+
+Rules:
+1. Return ONLY valid JSON. No markdown, no explanations.
+2. Be concise — every field must serve downstream sprint planning.
+3. Required fields: projectTitle, productVision, functionalRequirements, nonFunctionalRequirements, stakeholders, scope.
+4. functionalRequirements must be an array of objects with: id, title, description, priority, acceptanceCriteria (array of strings).
+5. nonFunctionalRequirements must be an array of objects with: id, title, description, priority.
+6. Do NOT include: useCases, uiComponents, dataModel, releasePlan, metricsAndSuccessCriteria, appendix, deliveryMilestones.
+7. acceptanceCriteria per requirement: max 3 bullet points, concise.
+8. Total response must stay under 3000 tokens.
 """,
         user_prompt=json.dumps(blueprint)
     )
