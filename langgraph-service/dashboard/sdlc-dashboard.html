@@ -240,40 +240,35 @@ async function triggerPipeline() {
         showToast('Cannot reach n8n: ' + e.message, 'error');
     }
 }
-/* 🔥 ADD THIS BELOW triggerPipeline */
-
-setInterval(loadDashboard, 2000);
-
 async function loadDashboard(){
   try{
     const res = await fetch('http://127.0.0.1:8000/dashboard/state');
     const data = await res.json();
-
-    console.log("STATE:", data); // DEBUG
-
-    // 🔥 update your appState
-    if(data.brd){
-      appState.stages['brd'] = data.brd;
-    }
-    if(data.prd){
-      appState.stages['prd'] = data.prd;
-    }
-    if(data.architecture){
-      appState.stages['architecture'] = data.architecture;
-    }
-    if(data.sprint_plan){
-      appState.stages['sprint_plan'] = data.sprint_plan;
-    }
-
-    render(); // IMPORTANT
-
+    let updated = false;
+    STAGES.forEach(function(s){
+      if(!data[s.id]) return;
+      var incoming = data[s.id];
+      var local = appState.stages[s.id];
+      if(local.status === 'approved' || local.status === 'rejected') return;
+      if(local.status === 'waiting' || incoming.timestamp !== local.timestamp){
+        delete appState.renderCache[s.id];
+        appState.stages[s.id] = {
+          status: incoming.status || 'pending',
+          data: incoming.data,
+          resumeUrl: incoming.resumeUrl || '',
+          timestamp: incoming.timestamp
+        };
+        // auto-navigate to newest active stage
+        if(local.status === 'waiting') appState.active = s.id;
+        updated = true;
+      }
+    });
+    if(updated) render();
+    document.getElementById('poll-status').textContent = 'live · '+new Date().toLocaleTimeString();
   }catch(e){
-    console.log("Dashboard fetch error", e);
+    document.getElementById('poll-status').textContent = 'offline';
   }
 }
-
-
-
 // ── AI RENDER ─────────────────────────────────────────────────────────────────
 function loadReadableView(stageId, data, containerId) {
   var container = document.getElementById(containerId);
@@ -475,35 +470,7 @@ function doReject(stageId){
   } else {finish();}
 }
 
-// ── AUTO-POLL ─────────────────────────────────────────────────────────────────
-function startPolling(){
-  setInterval(function(){
-    fetch('http://localhost:8000/dashboard/state')
-      .then(function(res){return res.json();})
-      .then(function(serverState){
-        var updated=false;
-        Object.keys(serverState).forEach(function(stageId){
-          var incoming=serverState[stageId];
-          var local=appState.stages[stageId];
-          if(incoming&&local&&local.status!=='approved'&&local.status!=='rejected'){
-            if(incoming.timestamp!==local.timestamp){
-              delete appState.renderCache[stageId]; // clear cache — new data arrived
-              appState.stages[stageId]={status:incoming.status||'pending',data:incoming.data,resumeUrl:incoming.resumeUrl||'',timestamp:incoming.timestamp};
-              updated=true;
-            }
-          }
-        });
-        if(updated){
-          render();
-          showToast('New stage data received from n8n','info');
-        }
-        document.getElementById('poll-status').textContent='live · '+new Date().toLocaleTimeString();
-      })
-      .catch(function(){
-        document.getElementById('poll-status').textContent='offline';
-      });
-  },5000);
-}
+
 
 // Build inject buttons
 var injH='';
@@ -511,7 +478,7 @@ STAGES.forEach(function(s){injH+='<button class="inject-btn" onclick="injectStag
 document.getElementById('inject-btns').innerHTML=injH;
 
 render();
-startPolling();
+
 </script>
 </body>
 </html>
