@@ -207,48 +207,38 @@ var appState={
 };
 
 async function triggerPipeline() {
-  var req = document.getElementById('req-input').value.trim();
-  if (!req) { 
-    showToast('Please enter a requirement', 'error'); 
-    return; 
-  }
+    var req = document.getElementById('req-input').value.trim();
 
-  // Reset all stages to waiting when new pipeline starts
-  Object.keys(appState.stages).forEach(function(id) {
-    appState.stages[id] = { status: 'waiting', data: null, resumeUrl: '', timestamp: null };
-  });
-  delete appState.banners;
-  appState.banners = {};
-  appState.renderCache = {};
-  appState.active = 'brd';
-
-  showToast('Launching pipeline...', 'info');
-
-  try {
-    var r = await fetch('http://localhost:8000/sdlc/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requirement: req })
-    });
-
-    if (r.ok) {
-      var data = await r.json();
-      // Immediately populate BRD stage with the response
-      appState.stages['brd'] = {
-        status: 'pending',
-        data: data,
-        resumeUrl: '',
-        timestamp: new Date().toISOString()
-      };
-      appState.active = 'brd';
-      showToast('Pipeline launched! BRD generated.', 'success');
-      render();
-    } else {
-      showToast('Failed to trigger pipeline: ' + r.status, 'error');
+    if (!req) {
+        showToast('Please enter a requirement first.', 'error');
+        return;
     }
-  } catch (e) {
-    showToast('Cannot reach backend: ' + e.message, 'error');
-  }
+
+    try {
+        var r = await fetch('http://localhost:5678/webhook/sdlc/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requirement: req })
+        });
+
+        if (r.ok) {
+            // Don't try to use response as BRD data - n8n will POST it back
+            appState.stages['brd'] = {
+                status: 'pending',
+                data: null,
+                resumeUrl: '',
+                timestamp: new Date().toISOString()
+            };
+            appState.active = 'brd';
+            showToast('Pipeline launched! Waiting for BRD from n8n...', 'success');
+            render();
+        } else {
+            showToast('Failed to trigger pipeline: ' + r.status, 'error');
+        }
+
+    } catch (e) {
+        showToast('Cannot reach n8n: ' + e.message, 'error');
+    }
 }
 
 // ── AI RENDER ─────────────────────────────────────────────────────────────────
