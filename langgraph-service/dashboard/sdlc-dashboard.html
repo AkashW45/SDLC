@@ -91,14 +91,18 @@ textarea.text-input{resize:vertical;min-height:65px;}
 .empty-icon{font-size:44px;margin-bottom:14px;opacity:0.25;}
 .empty-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--text2);margin-bottom:6px;}
 .empty-sub{font-size:11px;line-height:1.8;max-width:380px;margin:0 auto;}
-.config-panel{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;display:none;gap:18px;align-items:flex-end;flex-wrap:wrap;}
+.config-panel{padding:14px 28px;border-bottom:1px solid var(--border);background:var(--surface2);display:none;gap:18px;align-items:flex-end;flex-wrap:wrap;}
 .config-panel.open{display:flex;}
 .config-group{display:flex;flex-direction:column;gap:5px;}
 .config-label-sm{font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;}
 .inject-btns{display:flex;gap:6px;flex-wrap:wrap;}
 .inject-btn{background:var(--surface2);border:1px solid var(--border2);color:var(--text2);font-size:9px;padding:5px 9px;border-radius:4px;cursor:pointer;font-family:inherit;transition:all 0.12s;}
 .inject-btn:hover{border-color:var(--accent);color:var(--accent);}
-.toast{position:fixed;bottom:22px;right:22px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-size:11px;z-index:9999;max-width:280px;display:none;}
+/* ── TOAST ── */
+.toast{position:fixed;bottom:22px;right:22px;border-radius:8px;padding:10px 16px;font-size:11px;z-index:9999;max-width:300px;display:none;animation:fadeIn 0.2s ease;}
+.toast.success{background:rgba(0,255,136,0.12);border:1px solid rgba(0,255,136,0.3);color:var(--accent);}
+.toast.error{background:rgba(255,71,87,0.12);border:1px solid rgba(255,71,87,0.3);color:var(--danger);}
+.toast.info{background:rgba(0,153,255,0.12);border:1px solid rgba(0,153,255,0.3);color:var(--accent2);}
 /* AI render loading */
 .ai-loading{display:flex;align-items:center;gap:12px;padding:40px 20px;color:var(--text3);font-size:12px;}
 .ai-spinner{width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;}
@@ -129,17 +133,20 @@ textarea.text-input{resize:vertical;min-height:65px;}
   </div>
 </header>
 
+<!-- Launch bar -->
 <div style="padding:20px 28px;border-bottom:1px solid var(--border);background:var(--surface2);">
   <div style="font-size:9px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">Launch New Pipeline</div>
   <div style="display:flex;gap:12px;align-items:flex-end;">
-    <textarea id="req-input" placeholder="Enter your business requirement here..." 
+    <textarea id="req-input" placeholder="Enter your business requirement here..."
       style="flex:1;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;padding:10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;resize:none;height:60px;"></textarea>
-    <button onclick="triggerPipeline()" 
-      style="background:#00ff88;color:#090c10;border:none;padding:10px 20px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;cursor:pointer;height:60px;">
-      Launch Pipeline
+    <button onclick="triggerPipeline()"
+      style="background:#00ff88;color:#090c10;border:none;padding:10px 20px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;cursor:pointer;height:60px;white-space:nowrap;">
+      ▶ Launch Pipeline
     </button>
   </div>
 </div>
+
+<!-- Config panel (inject sample data) -->
 <div class="config-panel" id="config-panel">
   <div class="config-group" style="flex:1">
     <div class="config-label-sm">Inject Sample Data (offline preview)</div>
@@ -147,6 +154,7 @@ textarea.text-input{resize:vertical;min-height:65px;}
   </div>
 </div>
 
+<!-- Pipeline track -->
 <div class="pipeline"><div class="pipeline-track" id="pipeline-track"></div></div>
 
 <div class="main">
@@ -171,19 +179,62 @@ textarea.text-input{resize:vertical;min-height:65px;}
   <main class="content" id="content-area"></main>
 </div>
 
+<!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script>
-var STAGES=[
-  {id:'brd',         label:'BRD',          icon:'📋',num:'01'},
-  {id:'prd',         label:'PRD',           icon:'📄',num:'02'},
-  {id:'architecture',label:'Architecture',  icon:'🏗️', num:'03'},
-  {id:'sprint_plan', label:'Sprint Plan',   icon:'🗂️', num:'04'},
-  {id:'scaffold',    label:'Scaffold/Code', icon:'💻',num:'05'},
-  {id:'test_results',label:'Test Results',  icon:'🧪',num:'06'},
+// ═══════════════════════════════════════════════════════
+//  HELPERS  (esc + showToast — were missing, now fixed)
+// ═══════════════════════════════════════════════════════
+
+function esc(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+var _toastTimer = null;
+function showToast(msg, type) {
+  // type: 'success' | 'error' | 'info'
+  type = type || 'info';
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + type;
+  el.style.display = 'block';
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function(){ el.style.display = 'none'; }, 3500);
+}
+
+function timeAgo(ts) {
+  if (!ts) return '—';
+  var diff = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+// ═══════════════════════════════════════════════════════
+//  STAGES CONFIG
+// ═══════════════════════════════════════════════════════
+
+var STAGES = [
+  {id:'brd',          label:'BRD',           icon:'📋', num:'01'},
+  {id:'prd',          label:'PRD',            icon:'📄', num:'02'},
+  {id:'architecture', label:'Architecture',   icon:'🏗️',  num:'03'},
+  {id:'sprint_plan',  label:'Sprint Plan',    icon:'🗂️',  num:'04'},
+  {id:'scaffold',     label:'Scaffold/Code',  icon:'💻', num:'05'},
+  {id:'test_results', label:'Test Results',   icon:'🧪', num:'06'},
 ];
 
-var SAMPLE={
+// ═══════════════════════════════════════════════════════
+//  SAMPLE DATA (for offline preview via Config panel)
+// ═══════════════════════════════════════════════════════
+
+var SAMPLE = {
   brd:{status:'BRD_GENERATED',blueprint:{DocumentTitle:'Business Requirements Document - Stock Trading Dashboard',Version:'1.0',BusinessObjectives:['Provide real-time market visibility','Enable mock trading without financial risk','Increase engagement through watchlist and alerts'],Scope:{InScope:['Ticker search','Real-time price display','Watchlist','Mock orders','Portfolio summary'],OutOfScope:['Live trading','Mobile app','User authentication']},FunctionalRequirements:[{ID:'FR1',Title:'Stock Search',Description:'Search by ticker symbol',Priority:'High'},{ID:'FR2',Title:'Real-Time Display',Description:'Price, high, low, volume refreshed every 5s',Priority:'High'},{ID:'FR3',Title:'Watchlist',Description:'Add/remove stocks, session-scoped',Priority:'Medium'}],NonFunctionalRequirements:[{ID:'NFR1',Title:'Performance',Description:'Max 5s data latency'},{ID:'NFR2',Title:'Security',Description:'HTTPS, no persistent personal data'}]}},
   prd:{status:'PRD_GENERATED',projectTitle:'Stock Trading Dashboard',productVision:'Web-based dashboard for investors to monitor stocks and simulate trading.',functionalRequirements:[{id:'FR001',title:'Stock Search',description:'Search by ticker',priority:'High',acceptanceCriteria:['Valid ticker returns data','Invalid shows error']},{id:'FR002',title:'Real-Time Display',description:'Live price updates',priority:'High',acceptanceCriteria:['Updates every 5s']}],deliveryMilestones:[{milestone:'Sprint 1 — Search & Display',targetDate:'2026-03-22'},{milestone:'Sprint 2 — Orders & Watchlist',targetDate:'2026-03-29'}]},
   architecture:{status:'ARCHITECTURE_GENERATED',nodes:[{id:'API_GW',name:'API Gateway',type:'service',zone:'core'},{id:'STOCK_SVC',name:'Stock Service',type:'service',zone:'core'},{id:'SESSION_DB',name:'Session Store',type:'database',zone:'core'}],edges:[{source:'API_GW',target:'STOCK_SVC',protocol:'REST'},{source:'STOCK_SVC',target:'SESSION_DB',protocol:'internal'}]},
@@ -192,293 +243,346 @@ var SAMPLE={
   test_results:{status:'COVERAGE_BELOW_THRESHOLD',total:17,passed:5,failed:12,coverage:30,test_file:'tests/test_api.py',failed_tests:[{name:'test_search_valid',error:'assert 404 == 200'},{name:'test_place_order',error:'assert 404 == 200'}],passed_tests:[{name:'test_health'},{name:'test_brd_endpoint'}],coverage_by_file:[{file:'sdlc_api.py',coverage:68},{file:'stock_service.py',coverage:22}]}
 };
 
-var appState={
-  active:'brd',
-  banners:{},
-  renderCache:{},  // stageId -> rendered HTML, so we never call AI twice
-  stages:{
-    brd:         {status:'pending', data:SAMPLE.brd,  resumeUrl:'',timestamp:new Date().toISOString()},
-    prd:         {status:'waiting',data:null,          resumeUrl:'',timestamp:null},
-    architecture:{status:'waiting',data:null,          resumeUrl:'',timestamp:null},
-    sprint_plan: {status:'waiting',data:null,          resumeUrl:'',timestamp:null},
-    scaffold:    {status:'waiting',data:null,          resumeUrl:'',timestamp:null},
-    test_results:{status:'waiting',data:null,          resumeUrl:'',timestamp:null},
+// ═══════════════════════════════════════════════════════
+//  APP STATE
+// ═══════════════════════════════════════════════════════
+
+var appState = {
+  active: 'brd',
+  banners: {},
+  renderCache: {},
+  stages: {
+    brd:          {status:'waiting', data:null, resumeUrl:'', timestamp:null},
+    prd:          {status:'waiting', data:null, resumeUrl:'', timestamp:null},
+    architecture: {status:'waiting', data:null, resumeUrl:'', timestamp:null},
+    sprint_plan:  {status:'waiting', data:null, resumeUrl:'', timestamp:null},
+    scaffold:     {status:'waiting', data:null, resumeUrl:'', timestamp:null},
+    test_results: {status:'waiting', data:null, resumeUrl:'', timestamp:null},
   }
 };
 
-async function triggerPipeline() {
-    var req = document.getElementById('req-input').value.trim();
+// ═══════════════════════════════════════════════════════
+//  BUG 1 FIX — loadDashboard: covers ALL 6 stages,
+//  invalidates renderCache on new data, auto-navigates
+// ═══════════════════════════════════════════════════════
 
-    if (!req) {
-        showToast('Please enter a requirement first.', 'error');
-        return;
-    }
+async function loadDashboard() {
+  try {
+    var res = await fetch('http://127.0.0.1:8000/dashboard/state');
+    var data = await res.json();
+    var updated = false;
 
-    try {
-        var r = await fetch('http://localhost:5678/webhook/sdlc/start', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ requirement: req })
-        });
-
-        if (r.ok) {
-            // Don't try to use response as BRD data - n8n will POST it back
-            appState.stages['brd'] = {
-                status: 'pending',
-                data: null,
-                resumeUrl: '',
-                timestamp: new Date().toISOString()
-            };
-            appState.active = 'brd';
-            showToast('Pipeline launched! Waiting for BRD from n8n...', 'success');
-            render();
-        } else {
-            showToast('Failed to trigger pipeline: ' + r.status, 'error');
-        }
-
-    } catch (e) {
-        showToast('Cannot reach n8n: ' + e.message, 'error');
-    }
-}
-async function loadDashboard(){
-  try{
-    const res = await fetch('http://127.0.0.1:8000/dashboard/state');
-    const data = await res.json();
-    let updated = false;
-    STAGES.forEach(function(s){
-      if(!data[s.id]) return;
+    STAGES.forEach(function(s) {
+      if (!data[s.id]) return;
       var incoming = data[s.id];
       var local = appState.stages[s.id];
-      if(local.status === 'approved' || local.status === 'rejected') return;
-      if(local.status === 'waiting' || incoming.timestamp !== local.timestamp){
-        delete appState.renderCache[s.id];
+
+      // Never overwrite a local approve/reject decision
+      if (local.status === 'approved' || local.status === 'rejected') return;
+
+      // Update if: was waiting, OR server has fresher timestamp
+      if (local.status === 'waiting' || incoming.timestamp !== local.timestamp) {
+        delete appState.renderCache[s.id];   // force AI re-render for new data
         appState.stages[s.id] = {
-          status: incoming.status || 'pending',
-          data: incoming.data,
+          status:    incoming.status    || 'pending',
+          data:      incoming.data,
           resumeUrl: incoming.resumeUrl || '',
           timestamp: incoming.timestamp
         };
-        // auto-navigate to newest active stage
-        if(local.status === 'waiting') appState.active = s.id;
+        if (local.status === 'waiting') appState.active = s.id; // auto-navigate
         updated = true;
       }
     });
-    if(updated) render();
-    document.getElementById('poll-status').textContent = 'live · '+new Date().toLocaleTimeString();
-  }catch(e){
+
+    if (updated) render();
+    document.getElementById('poll-status').textContent = 'live · ' + new Date().toLocaleTimeString();
+  } catch(e) {
     document.getElementById('poll-status').textContent = 'offline';
   }
 }
-// ── AI RENDER ─────────────────────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════
+//  BUG 2 FIX — ONE poller only, no duplicate setInterval
+// ═══════════════════════════════════════════════════════
+// Only this single interval — no startPolling() anywhere.
+setInterval(loadDashboard, 2000);
+loadDashboard(); // immediate first load
+
+// ═══════════════════════════════════════════════════════
+//  PIPELINE TRIGGER
+// ═══════════════════════════════════════════════════════
+
+async function triggerPipeline() {
+  var req = document.getElementById('req-input').value.trim();
+  if (!req) { showToast('Please enter a requirement first.', 'error'); return; }
+
+  try {
+    var r = await fetch('http://localhost:5678/webhook/sdlc/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({requirement: req})
+    });
+
+    if (r.ok) {
+      appState.stages['brd'] = {status:'pending', data:null, resumeUrl:'', timestamp:new Date().toISOString()};
+      appState.active = 'brd';
+      showToast('Pipeline launched! Waiting for BRD from n8n...', 'success');
+      render();
+    } else {
+      showToast('Failed to trigger pipeline: ' + r.status, 'error');
+    }
+  } catch(e) {
+    showToast('Cannot reach n8n: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  AI RENDER
+// ═══════════════════════════════════════════════════════
+
 function loadReadableView(stageId, data, containerId) {
   var container = document.getElementById(containerId);
   if (!container) return;
 
-  // Already cached — show instantly
   if (appState.renderCache[stageId]) {
-    container.innerHTML = '<div class="ai-rendered">'+appState.renderCache[stageId]+'</div>';
+    container.innerHTML = '<div class="ai-rendered">' + appState.renderCache[stageId] + '</div>';
     return;
   }
 
-  // Show loading spinner
   container.innerHTML = '<div class="ai-loading"><div class="ai-spinner"></div><span>Rendering with AI...</span></div>';
 
   fetch('http://localhost:8000/dashboard/render', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({stage: stageId, data: data})
   })
   .then(function(res){ return res.json(); })
   .then(function(result){
     appState.renderCache[stageId] = result.html;
-    container.innerHTML = '<div class="ai-rendered">'+result.html+'</div>';
+    container.innerHTML = '<div class="ai-rendered">' + result.html + '</div>';
   })
   .catch(function(e){
-    container.innerHTML = '<div style="color:var(--danger);padding:20px;font-size:12px">Failed to render: '+esc(e.message)+'</div>';
+    container.innerHTML = '<div style="color:var(--danger);padding:20px;font-size:12px">Failed to render: ' + esc(e.message) + '</div>';
   });
 }
 
-// ── CORE RENDER ───────────────────────────────────────────────────────────────
-function render(){renderPipeline();renderSidebar();renderStats();renderContent();}
+// ═══════════════════════════════════════════════════════
+//  RENDER FUNCTIONS
+// ═══════════════════════════════════════════════════════
+
+function render(){ renderPipeline(); renderSidebar(); renderStats(); renderContent(); }
 
 function renderPipeline(){
-  var h='';
-  STAGES.forEach(function(s,i){
-    var sd=appState.stages[s.id];
-    h+='<div class="pipe-stage '+(appState.active===s.id?'active':'')+'" onclick="setStage(\''+s.id+'\')">';
-    h+='<div class="pipe-dot '+sd.status+'"></div><span class="pipe-name">'+s.label+'</span></div>';
-    if(i<STAGES.length-1)h+='<div class="pipe-arrow">→</div>';
+  var h = '';
+  STAGES.forEach(function(s, i){
+    var sd = appState.stages[s.id];
+    h += '<div class="pipe-stage ' + (appState.active===s.id?'active':'') + '" onclick="setStage(\'' + s.id + '\')">';
+    h += '<div class="pipe-dot ' + sd.status + '"></div>';
+    h += '<span class="pipe-name">' + s.label + '</span></div>';
+    if (i < STAGES.length-1) h += '<div class="pipe-arrow">→</div>';
   });
-  document.getElementById('pipeline-track').innerHTML=h;
+  document.getElementById('pipeline-track').innerHTML = h;
 }
 
 function renderSidebar(){
-  var h='';
+  var h = '';
   STAGES.forEach(function(s){
-    var sd=appState.stages[s.id];
-    h+='<div class="stage-item '+(appState.active===s.id?'active':'')+'" onclick="setStage(\''+s.id+'\')">';
-    h+='<div class="stage-num">'+s.num+'</div><div class="stage-info"><div class="stage-title">'+s.icon+' '+s.label+'</div><div class="stage-time">'+timeAgo(sd.timestamp)+'</div></div>';
-    h+='<span class="badge '+sd.status+'">'+sd.status+'</span></div>';
+    var sd = appState.stages[s.id];
+    h += '<div class="stage-item ' + (appState.active===s.id?'active':'') + '" onclick="setStage(\'' + s.id + '\')">';
+    h += '<div class="stage-num">' + s.num + '</div>';
+    h += '<div class="stage-info"><div class="stage-title">' + s.icon + ' ' + s.label + '</div>';
+    h += '<div class="stage-time">' + timeAgo(sd.timestamp) + '</div></div>';
+    h += '<span class="badge ' + sd.status + '">' + sd.status + '</span></div>';
   });
-  document.getElementById('stage-list').innerHTML=h;
+  document.getElementById('stage-list').innerHTML = h;
 }
 
 function renderStats(){
-  var vals=Object.values(appState.stages);
-  var rows=[
-    {label:'Approved',val:vals.filter(function(s){return s.status==='approved';}).length,color:'var(--accent)'},
-    {label:'Pending', val:vals.filter(function(s){return s.status==='pending';}).length, color:'var(--warn)'},
-    {label:'Rejected',val:vals.filter(function(s){return s.status==='rejected';}).length,color:'var(--danger)'},
-    {label:'Waiting', val:vals.filter(function(s){return s.status==='waiting';}).length, color:'var(--text3)'},
+  var vals = Object.values(appState.stages);
+  var rows = [
+    {label:'Approved', val:vals.filter(function(s){return s.status==='approved';}).length, color:'var(--accent)'},
+    {label:'Pending',  val:vals.filter(function(s){return s.status==='pending';}).length,  color:'var(--warn)'},
+    {label:'Rejected', val:vals.filter(function(s){return s.status==='rejected';}).length, color:'var(--danger)'},
+    {label:'Waiting',  val:vals.filter(function(s){return s.status==='waiting';}).length,  color:'var(--text3)'},
   ];
-  var h='';rows.forEach(function(r){h+='<div class="stat-row"><span class="stat-label">'+r.label+'</span><span class="stat-val" style="color:'+r.color+'">'+r.val+'</span></div>';});
-  document.getElementById('stats-panel').innerHTML=h;
+  var h = '';
+  rows.forEach(function(r){
+    h += '<div class="stat-row"><span class="stat-label">' + r.label + '</span><span class="stat-val" style="color:' + r.color + '">' + r.val + '</span></div>';
+  });
+  document.getElementById('stats-panel').innerHTML = h;
 }
 
 function renderContent(){
-  var stage=STAGES.find(function(s){return s.id===appState.active;});
-  var sd=appState.stages[appState.active];
-  var banner=appState.banners[appState.active];
-  var ca=document.getElementById('content-area');
+  var stage = STAGES.find(function(s){ return s.id === appState.active; });
+  var sd = appState.stages[appState.active];
+  var banner = appState.banners[appState.active];
+  var ca = document.getElementById('content-area');
 
-  var h='<div style="margin-bottom:20px"><div class="content-title">'+stage.icon+' '+stage.label+'</div>';
-  h+='<div class="content-meta"><span class="meta-chip">Stage '+stage.num+' / 06</span>';
-  h+='<span class="badge '+sd.status+'" style="font-size:10px;padding:3px 8px">'+sd.status.toUpperCase()+'</span>';
-  if(sd.timestamp)h+='<span class="meta-chip">'+timeAgo(sd.timestamp)+'</span>';
-  h+='</div></div>';
+  var h = '<div style="margin-bottom:20px">';
+  h += '<div class="content-title">' + stage.icon + ' ' + stage.label + '</div>';
+  h += '<div class="content-meta"><span class="meta-chip">Stage ' + stage.num + ' / 06</span>';
+  h += '<span class="badge ' + sd.status + '" style="font-size:10px;padding:3px 8px">' + sd.status.toUpperCase() + '</span>';
+  if (sd.timestamp) h += '<span class="meta-chip">' + timeAgo(sd.timestamp) + '</span>';
+  h += '</div></div>';
 
-  if(banner)h+='<div class="banner '+banner.type+'">'+(banner.type==='success'?'✓':banner.type==='error'?'✗':'ℹ')+' '+esc(banner.msg)+'</div>';
+  if (banner) h += '<div class="banner ' + banner.type + '">' + (banner.type==='success'?'✓':banner.type==='error'?'✗':'ℹ') + ' ' + esc(banner.msg) + '</div>';
 
-  if(sd.status==='waiting'){
-    h+='<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Awaiting n8n Output</div><div class="empty-sub">Waiting for n8n to POST this stage\'s data.</div></div>';
-    ca.innerHTML=h;return;
+  if (sd.status === 'waiting') {
+    h += '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Awaiting n8n Output</div><div class="empty-sub">Waiting for n8n to POST this stage\'s data to /dashboard/stage.</div></div>';
+    ca.innerHTML = h;
+    return;
   }
 
   // Tabs
-  h+='<div class="tabs">';
-  h+='<button class="tab active" id="tbtn-readable" onclick="switchTab(\'readable\',\''+appState.active+'\')">👁 Readable View</button>';
-  h+='<button class="tab" id="tbtn-raw" onclick="switchTab(\'raw\',\''+appState.active+'\')">{ } Raw JSON</button>';
-  h+='</div>';
+  h += '<div class="tabs">';
+  h += '<button class="tab active" id="tbtn-readable" onclick="switchTab(\'readable\')">👁 Readable View</button>';
+  h += '<button class="tab" id="tbtn-raw" onclick="switchTab(\'raw\')">{ } Raw JSON</button>';
+  h += '</div>';
 
-  // Readable tab — container div, AI will fill it
-  h+='<div id="tab-readable"><div id="ai-render-container"></div></div>';
+  h += '<div id="tab-readable"><div id="ai-render-container"></div></div>';
 
-  // Raw tab
-  h+='<div id="tab-raw" style="display:none">';
-  h+='<pre style="font-size:12px;line-height:1.8;color:var(--text2);white-space:pre-wrap;word-break:break-all;background:var(--surface2);padding:16px;border-radius:8px;border:1px solid var(--border)">'+esc(JSON.stringify(sd.data,null,2))+'</pre>';
-  h+='</div>';
+  h += '<div id="tab-raw" style="display:none">';
+  h += '<pre style="font-size:12px;line-height:1.8;color:var(--text2);white-space:pre-wrap;word-break:break-all;background:var(--surface2);padding:16px;border-radius:8px;border:1px solid var(--border)">' + esc(JSON.stringify(sd.data, null, 2)) + '</pre>';
+  h += '</div>';
 
-  h+=buildApprovalZone(stage,sd);
-  ca.innerHTML=h;
+  h += buildApprovalZone(stage, sd);
+  ca.innerHTML = h;
 
-  // Trigger AI render after DOM is ready
   loadReadableView(appState.active, sd.data, 'ai-render-container');
 }
 
-function buildApprovalZone(stage,sd){
-  if(sd.status==='approved')return'<div class="approval-zone state-approved"><div class="done-row" style="color:var(--accent)"><span style="font-size:18px">✓</span> Stage Approved<span style="margin-left:auto;font-size:10px;color:var(--text3)">'+timeAgo(sd.approvedAt)+'</span></div>'+(sd.feedback?'<div class="feedback-note">💬 '+esc(sd.feedback)+'</div>':'')+'</div>';
-  if(sd.status==='rejected')return'<div class="approval-zone state-rejected"><div class="done-row" style="color:var(--danger)"><span style="font-size:18px">✗</span> Stage Rejected</div>'+(sd.feedback?'<div class="feedback-note">💬 '+esc(sd.feedback)+'</div>':'')+'</div>';
-  return'<div class="approval-zone"><div class="approval-title">Review &amp; Approve</div>'+
-    '<div class="resume-box"><div class="resume-label">⚡ n8n Resume URL</div>'+
-    '<input class="text-input" id="resume-'+stage.id+'" placeholder="https://your-n8n/webhook/xxx/waiting" value="'+esc(sd.resumeUrl||'')+'">'+
-    '<div class="input-hint">n8n execution panel → Wait node → copy resume URL → paste here</div></div>'+
-    '<div class="feedback-label">Feedback / Notes (optional)</div>'+
-    '<textarea class="text-input" id="feedback-'+stage.id+'" placeholder="Add change requests or rejection reason..."></textarea>'+
-    '<div class="action-row">'+
-    '<button class="btn btn-approve" id="abtn-'+stage.id+'" onclick="doApprove(\''+stage.id+'\')">✓ Approve &amp; Continue</button>'+
-    '<button class="btn btn-reject" id="rbtn-'+stage.id+'" onclick="doReject(\''+stage.id+'\')">✗ Reject</button>'+
-    '<span class="action-hint">Approve calls resume URL → n8n resumes</span>'+
+function buildApprovalZone(stage, sd){
+  if (sd.status === 'approved') {
+    return '<div class="approval-zone state-approved"><div class="done-row" style="color:var(--accent)"><span style="font-size:18px">✓</span> Stage Approved<span style="margin-left:auto;font-size:10px;color:var(--text3)">' + timeAgo(sd.approvedAt) + '</span></div>' + (sd.feedback ? '<div class="feedback-note">💬 ' + esc(sd.feedback) + '</div>' : '') + '</div>';
+  }
+  if (sd.status === 'rejected') {
+    return '<div class="approval-zone state-rejected"><div class="done-row" style="color:var(--danger)"><span style="font-size:18px">✗</span> Stage Rejected</div>' + (sd.feedback ? '<div class="feedback-note">💬 ' + esc(sd.feedback) + '</div>' : '') + '</div>';
+  }
+  return '<div class="approval-zone"><div class="approval-title">Review &amp; Approve</div>' +
+    '<div class="resume-box"><div class="resume-label">⚡ n8n Resume URL</div>' +
+    '<input class="text-input" id="resume-' + stage.id + '" placeholder="https://your-n8n/webhook/xxx/waiting" value="' + esc(sd.resumeUrl||'') + '">' +
+    '<div class="input-hint">n8n execution panel → Wait node → copy resume URL → paste here</div></div>' +
+    '<div class="feedback-label">Feedback / Notes (optional)</div>' +
+    '<textarea class="text-input" id="feedback-' + stage.id + '" placeholder="Add change requests or rejection reason..."></textarea>' +
+    '<div class="action-row">' +
+    '<button class="btn btn-approve" id="abtn-' + stage.id + '" onclick="doApprove(\'' + stage.id + '\')">✓ Approve &amp; Continue</button>' +
+    '<button class="btn btn-reject"  id="rbtn-' + stage.id + '" onclick="doReject(\''  + stage.id + '\')">✗ Reject</button>' +
+    '<span class="action-hint">Approve calls resume URL → n8n resumes</span>' +
     '</div></div>';
 }
 
-function switchTab(name, stageId){
-  var readEl=document.getElementById('tab-readable');
-  var rawEl=document.getElementById('tab-raw');
-  var rBtn=document.getElementById('tbtn-readable');
-  var rawBtn=document.getElementById('tbtn-raw');
-  if(name==='readable'){
-    if(readEl)readEl.style.display='block';
-    if(rawEl)rawEl.style.display='none';
-    if(rBtn)rBtn.classList.add('active');
-    if(rawBtn)rawBtn.classList.remove('active');
+function switchTab(name){
+  var readEl  = document.getElementById('tab-readable');
+  var rawEl   = document.getElementById('tab-raw');
+  var rBtn    = document.getElementById('tbtn-readable');
+  var rawBtn  = document.getElementById('tbtn-raw');
+  if (name === 'readable') {
+    if (readEl) readEl.style.display = 'block';
+    if (rawEl)  rawEl.style.display  = 'none';
+    if (rBtn)   rBtn.classList.add('active');
+    if (rawBtn) rawBtn.classList.remove('active');
   } else {
-    if(readEl)readEl.style.display='none';
-    if(rawEl)rawEl.style.display='block';
-    if(rBtn)rBtn.classList.remove('active');
-    if(rawBtn)rawBtn.classList.add('active');
+    if (readEl) readEl.style.display = 'none';
+    if (rawEl)  rawEl.style.display  = 'block';
+    if (rBtn)   rBtn.classList.remove('active');
+    if (rawBtn) rawBtn.classList.add('active');
   }
 }
 
-function setStage(id){
-  appState.active=id;
-  render();
-}
-
-function toggleConfig(){document.getElementById('config-panel').classList.toggle('open');}
+function setStage(id){ appState.active = id; render(); }
+function toggleConfig(){ document.getElementById('config-panel').classList.toggle('open'); }
 
 function injectStage(stageId){
-  delete appState.renderCache[stageId]; // clear cache so AI re-renders
-  appState.stages[stageId]={status:'pending',data:SAMPLE[stageId],resumeUrl:'',timestamp:new Date().toISOString()};
+  delete appState.renderCache[stageId];
+  appState.stages[stageId] = {status:'pending', data:SAMPLE[stageId], resumeUrl:'', timestamp:new Date().toISOString()};
   delete appState.banners[stageId];
-  appState.active=stageId;
-  showToast(stageId+' sample data injected','info');
+  appState.active = stageId;
+  showToast(stageId + ' sample data injected', 'info');
   render();
 }
 
-function doApprove(stageId){
-  var resumeEl=document.getElementById('resume-'+stageId);
-  var feedbackEl=document.getElementById('feedback-'+stageId);
-  var resumeUrl=resumeEl?resumeEl.value.trim():'';
-  var feedback=feedbackEl?feedbackEl.value.trim():'';
-  var abtn=document.getElementById('abtn-'+stageId),rbtn=document.getElementById('rbtn-'+stageId);
-  if(abtn)abtn.disabled=true;if(rbtn)rbtn.disabled=true;
+// ═══════════════════════════════════════════════════════
+//  BUG 3 FIX — doApprove: includes {approved, feedback, stage}
+//  BUG 4 FIX — doReject: also includes {approved:false, stage}
+// ═══════════════════════════════════════════════════════
 
-  function finish(bt,bm){
-    appState.stages[stageId].status='approved';
-    appState.stages[stageId].feedback=feedback;
-    appState.stages[stageId].approvedAt=new Date().toISOString();
-    appState.banners[stageId]={type:bt,msg:bm};
-    showToast(stageId+' approved ✓','success');
-    var idx=STAGES.findIndex(function(s){return s.id===stageId;});
-    if(idx<STAGES.length-1)setTimeout(function(){appState.active=STAGES[idx+1].id;render();},700);
-    else render();
+function doApprove(stageId){
+  var resumeEl   = document.getElementById('resume-'   + stageId);
+  var feedbackEl = document.getElementById('feedback-' + stageId);
+  var resumeUrl  = resumeEl   ? resumeEl.value.trim()   : '';
+  var feedback   = feedbackEl ? feedbackEl.value.trim() : '';
+  var abtn = document.getElementById('abtn-' + stageId);
+  var rbtn = document.getElementById('rbtn-' + stageId);
+  if (abtn) abtn.disabled = true;
+  if (rbtn) rbtn.disabled = true;
+
+  function finish(bt, bm){
+    appState.stages[stageId].status     = 'approved';
+    appState.stages[stageId].feedback   = feedback;
+    appState.stages[stageId].approvedAt = new Date().toISOString();
+    appState.banners[stageId] = {type: bt, msg: bm};
+    showToast(stageId + ' approved ✓', 'success');
+    var idx = STAGES.findIndex(function(s){ return s.id === stageId; });
+    if (idx < STAGES.length - 1) {
+      setTimeout(function(){ appState.active = STAGES[idx+1].id; render(); }, 700);
+    } else {
+      render();
+    }
   }
 
-  if(resumeUrl&&resumeUrl.indexOf('http')===0){
-    fetch(resumeUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,feedback:feedback,stage:stageId})})
-    .then(function(){finish('success','n8n resume URL called — workflow continuing.');})
-    .catch(function(e){finish('error','Could not reach resume URL: '+e.message);});
+  if (resumeUrl && resumeUrl.indexOf('http') === 0) {
+    fetch(resumeUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      // ← FIX: includes approved:true AND stage so n8n webhook condition works
+      body: JSON.stringify({approved: true, feedback: feedback, stage: stageId})
+    })
+    .then(function(){ finish('success', 'n8n resume URL called — workflow continuing.'); })
+    .catch(function(e){ finish('error', 'Could not reach resume URL: ' + e.message); });
   } else {
-    finish('info','No resume URL — stage approved locally.');
+    finish('info', 'No resume URL — stage approved locally.');
   }
 }
 
 function doReject(stageId){
-  var resumeEl=document.getElementById('resume-'+stageId);
-  var feedbackEl=document.getElementById('feedback-'+stageId);
-  var resumeUrl=resumeEl?resumeEl.value.trim():'';
-  var feedback=feedbackEl?feedbackEl.value.trim():'';
+  var resumeEl   = document.getElementById('resume-'   + stageId);
+  var feedbackEl = document.getElementById('feedback-' + stageId);
+  var resumeUrl  = resumeEl   ? resumeEl.value.trim()   : '';
+  var feedback   = feedbackEl ? feedbackEl.value.trim() : '';
+
   function finish(){
-    appState.stages[stageId].status='rejected';
-    appState.stages[stageId].feedback=feedback;
-    appState.banners[stageId]={type:'error',msg:'Stage rejected. Fix issues and re-trigger in n8n.'};
-    showToast(stageId+' rejected','error');
+    appState.stages[stageId].status   = 'rejected';
+    appState.stages[stageId].feedback = feedback;
+    appState.banners[stageId] = {type: 'error', msg: 'Stage rejected. Fix issues and re-trigger in n8n.'};
+    showToast(stageId + ' rejected', 'error');
     render();
   }
-  if(resumeUrl&&resumeUrl.indexOf('http')===0){
-    fetch(resumeUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:false,feedback:feedback,stage:stageId})}).then(finish).catch(finish);
-  } else {finish();}
+
+  if (resumeUrl && resumeUrl.indexOf('http') === 0) {
+    fetch(resumeUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      // ← FIX: includes approved:false AND stage so n8n knows it was rejected
+      body: JSON.stringify({approved: false, feedback: feedback, stage: stageId})
+    })
+    .then(finish)
+    .catch(finish);
+  } else {
+    finish();
+  }
 }
 
+// ═══════════════════════════════════════════════════════
+//  INIT — build inject buttons and first render
+// ═══════════════════════════════════════════════════════
 
-
-// Build inject buttons
-var injH='';
-STAGES.forEach(function(s){injH+='<button class="inject-btn" onclick="injectStage(\''+s.id+'\')">'+s.icon+' '+s.label+'</button>';});
-document.getElementById('inject-btns').innerHTML=injH;
+var injH = '';
+STAGES.forEach(function(s){
+  injH += '<button class="inject-btn" onclick="injectStage(\'' + s.id + '\')">' + s.icon + ' ' + s.label + '</button>';
+});
+document.getElementById('inject-btns').innerHTML = injH;
 
 render();
-
 </script>
 </body>
 </html>
