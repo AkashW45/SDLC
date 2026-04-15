@@ -1,1 +1,30 @@
 sqlite3
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+
+# AI / LLM
+groq
+
+# HTTP / API calls
+requests
+httpx
+
+# Data handling
+typing-extensions
+
+# Diagram / rendering
+Pillow
+
+# GitHub integration
+PyGithub
+
+# Jira integration
+atlassian-python-api
+
+# Testing (used in your test_service)
+pytest
+
+# Optional but useful
+jinja2

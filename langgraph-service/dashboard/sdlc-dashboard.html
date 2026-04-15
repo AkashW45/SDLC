@@ -240,6 +240,39 @@ async function triggerPipeline() {
         showToast('Cannot reach n8n: ' + e.message, 'error');
     }
 }
+/* 🔥 ADD THIS BELOW triggerPipeline */
+
+setInterval(loadDashboard, 2000);
+
+async function loadDashboard(){
+  try{
+    const res = await fetch('http://127.0.0.1:8000/dashboard/state');
+    const data = await res.json();
+
+    console.log("STATE:", data); // DEBUG
+
+    // 🔥 update your appState
+    if(data.brd){
+      appState.stages['brd'] = data.brd;
+    }
+    if(data.prd){
+      appState.stages['prd'] = data.prd;
+    }
+    if(data.architecture){
+      appState.stages['architecture'] = data.architecture;
+    }
+    if(data.sprint_plan){
+      appState.stages['sprint_plan'] = data.sprint_plan;
+    }
+
+    render(); // IMPORTANT
+
+  }catch(e){
+    console.log("Dashboard fetch error", e);
+  }
+}
+
+
 
 // ── AI RENDER ─────────────────────────────────────────────────────────────────
 function loadReadableView(stageId, data, containerId) {
