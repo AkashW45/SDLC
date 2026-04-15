@@ -7,8 +7,50 @@ import os, json, httpx
 
 router = APIRouter()
 
-_stage_store: dict = {}
-_render_cache: dict = {}
+# NEW - replace with this
+import sqlite3
+
+DB_PATH = "pipeline_state.db"
+_render_cache: dict = {}  # keep this in-memory, it's just HTML cache
+
+def _init_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS stages (
+            stage TEXT PRIMARY KEY,
+            status TEXT,
+            data TEXT,
+            resume_url TEXT,
+            timestamp TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def _save_stage(stage: str, status: str, data: any, resume_url: str, timestamp: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT OR REPLACE INTO stages VALUES (?,?,?,?,?)",
+        (stage, status, json.dumps(data), resume_url or "", timestamp)
+    )
+    conn.commit()
+    conn.close()
+
+def _load_all_stages() -> dict:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("SELECT * FROM stages").fetchall()
+    conn.close()
+    return {
+        r[0]: {
+            "status": r[1],
+            "data": json.loads(r[2]) if r[2] else None,
+            "resumeUrl": r[3],
+            "timestamp": r[4]
+        }
+        for r in rows
+    }
+
+_init_db()  # runs once on startup
 
 STAGE_LABELS = {
     "brd":          "Business Requirements Document",
@@ -31,24 +73,27 @@ class RenderRequest(BaseModel):
     data: Any
 
 
+# REPLACE receive_stage_output
 @router.post("/dashboard/stage")
 def receive_stage_output(payload: StagePayload):
     if payload.stage in _render_cache:
         del _render_cache[payload.stage]
 
-    _stage_store[payload.stage] = {
-        "status": "pending",
-        "data": payload.data,
-        "resumeUrl": payload.resumeUrl or "",
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
-    print(f"[DASHBOARD] Stage '{payload.stage}' received")
+    _save_stage(
+        stage=payload.stage,
+        status="pending",
+        data=payload.data,
+        resume_url=payload.resumeUrl or "",
+        timestamp=datetime.now(timezone.utc).isoformat()
+    )
+    print(f"[DASHBOARD] Stage '{payload.stage}' received and persisted")
     return {"ok": True, "stage": payload.stage}
 
 
+# REPLACE get_dashboard_state
 @router.get("/dashboard/state")
 def get_dashboard_state():
-    return JSONResponse(content=_stage_store)
+    return JSONResponse(content=_load_all_stages())
 
 
 @router.post("/dashboard/render")

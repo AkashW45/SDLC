@@ -129,6 +129,17 @@ textarea.text-input{resize:vertical;min-height:65px;}
   </div>
 </header>
 
+<div style="padding:20px 28px;border-bottom:1px solid var(--border);background:var(--surface2);">
+  <div style="font-size:9px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">Launch New Pipeline</div>
+  <div style="display:flex;gap:12px;align-items:flex-end;">
+    <textarea id="req-input" placeholder="Enter your business requirement here..." 
+      style="flex:1;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;padding:10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;resize:none;height:60px;"></textarea>
+    <button onclick="triggerPipeline()" 
+      style="background:#00ff88;color:#090c10;border:none;padding:10px 20px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;cursor:pointer;height:60px;">
+      Launch Pipeline
+    </button>
+  </div>
+</div>
 <div class="config-panel" id="config-panel">
   <div class="config-group" style="flex:1">
     <div class="config-label-sm">Inject Sample Data (offline preview)</div>
@@ -195,16 +206,49 @@ var appState={
   }
 };
 
-function timeAgo(iso){if(!iso)return'—';var d=Date.now()-new Date(iso).getTime(),m=Math.floor(d/60000);if(m<1)return'just now';if(m<60)return m+'m ago';return Math.floor(m/60)+'h ago';}
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+async function triggerPipeline() {
+  var req = document.getElementById('req-input').value.trim();
+  if (!req) { 
+    showToast('Please enter a requirement', 'error'); 
+    return; 
+  }
 
-function showToast(msg,type){
-  var t=document.getElementById('toast');
-  var bc={success:'rgba(0,255,136,0.3)',error:'rgba(255,71,87,0.3)',info:'rgba(0,153,255,0.3)'};
-  var tc={success:'var(--accent)',error:'var(--danger)',info:'var(--accent2)'};
-  t.style.borderColor=bc[type]||bc.info;t.style.color=tc[type]||tc.info;
-  t.textContent=(type==='success'?'✓ ':type==='error'?'✗ ':'ℹ ')+msg;
-  t.style.display='block';clearTimeout(t._t);t._t=setTimeout(function(){t.style.display='none';},4000);
+  // Reset all stages to waiting when new pipeline starts
+  Object.keys(appState.stages).forEach(function(id) {
+    appState.stages[id] = { status: 'waiting', data: null, resumeUrl: '', timestamp: null };
+  });
+  delete appState.banners;
+  appState.banners = {};
+  appState.renderCache = {};
+  appState.active = 'brd';
+
+  showToast('Launching pipeline...', 'info');
+
+  try {
+    var r = await fetch('http://localhost:8000/sdlc/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requirement: req })
+    });
+
+    if (r.ok) {
+      var data = await r.json();
+      // Immediately populate BRD stage with the response
+      appState.stages['brd'] = {
+        status: 'pending',
+        data: data,
+        resumeUrl: '',
+        timestamp: new Date().toISOString()
+      };
+      appState.active = 'brd';
+      showToast('Pipeline launched! BRD generated.', 'success');
+      render();
+    } else {
+      showToast('Failed to trigger pipeline: ' + r.status, 'error');
+    }
+  } catch (e) {
+    showToast('Cannot reach backend: ' + e.message, 'error');
+  }
 }
 
 // ── AI RENDER ─────────────────────────────────────────────────────────────────
