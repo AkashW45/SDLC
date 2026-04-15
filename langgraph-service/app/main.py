@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.api.sdlc_api import router as sdlc_router
 from app.api.scaffold_api import router as scaffold_router
 from app.api.git_api import router as git_router
+from app.api.dashboard_api import router as dashboard_router
 
 # 1️⃣ Create app FIRST
 app = FastAPI()
@@ -27,4 +28,4 @@ app.add_middleware(
 app.include_router(sdlc_router)
 app.include_router(scaffold_router)
 app.include_router(git_router)
-
+app.include_router(dashboard_router)

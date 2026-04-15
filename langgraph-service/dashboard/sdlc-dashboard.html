@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI SDLC Control Tower</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#090c10;--surface:#0d1117;--surface2:#161b22;--surface3:#1c2330;--border:#21262d;--border2:#30363d;--accent:#00ff88;--accent2:#0099ff;--danger:#ff4757;--warn:#f0a500;--text:#e6edf3;--text2:#8b949e;--text3:#484f58;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,255,136,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,0.02) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+.app{position:relative;z-index:1;}
+.header{border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;background:rgba(9,12,16,0.96);backdrop-filter:blur(10px);position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-icon{width:32px;height:32px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--bg);font-weight:800;font-family:'Syne',sans-serif;}
+.logo-text{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;letter-spacing:-0.5px;}
+.logo-sub{font-size:9px;color:var(--text2);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.pulse{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);}
+.pulse-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.8)}}
+.pipeline{padding:14px 28px;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto;}
+.pipeline-track{display:flex;align-items:center;min-width:max-content;}
+.pipe-stage{display:flex;align-items:center;gap:8px;padding:6px 13px;border-radius:6px;cursor:pointer;transition:all 0.15s;border:1px solid transparent;}
+.pipe-stage:hover{background:var(--surface2);}
+.pipe-stage.active{background:rgba(0,255,136,0.07);border-color:rgba(0,255,136,0.25);}
+.pipe-dot{width:9px;height:9px;border-radius:50%;border:2px solid var(--border2);flex-shrink:0;}
+.pipe-dot.approved{background:var(--accent);border-color:var(--accent);}
+.pipe-dot.rejected{background:var(--danger);border-color:var(--danger);}
+.pipe-dot.pending{background:var(--warn);border-color:var(--warn);animation:blink 1.5s infinite;}
+.pipe-dot.waiting{background:transparent;border-color:var(--border2);}
+.pipe-name{font-size:11px;font-weight:500;color:var(--text2);white-space:nowrap;}
+.pipe-stage.active .pipe-name{color:var(--accent);}
+.pipe-arrow{color:var(--text3);font-size:11px;padding:0 4px;}
+.main{display:grid;grid-template-columns:250px 1fr;min-height:calc(100vh - 108px);}
+.sidebar{border-right:1px solid var(--border);background:var(--surface);padding:18px 0;overflow-y:auto;}
+.sidebar-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);padding:0 16px 7px;}
+.stage-item{display:flex;align-items:center;gap:9px;padding:8px 14px;cursor:pointer;transition:background 0.12s;margin:1px 7px;border-radius:6px;border:1px solid transparent;}
+.stage-item:hover{background:var(--surface2);}
+.stage-item.active{background:rgba(0,255,136,0.05);border-color:rgba(0,255,136,0.15);}
+.stage-num{width:21px;height:21px;border-radius:4px;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text2);font-weight:700;flex-shrink:0;}
+.stage-item.active .stage-num{background:var(--accent);color:var(--bg);}
+.stage-info{flex:1;min-width:0;}
+.stage-title{font-size:11px;font-weight:500;color:var(--text);}
+.stage-item.active .stage-title{color:var(--accent);}
+.stage-time{font-size:9px;color:var(--text3);margin-top:1px;}
+.badge{font-size:8px;padding:2px 5px;border-radius:3px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0;}
+.badge.approved{background:rgba(0,255,136,0.12);color:var(--accent);}
+.badge.rejected{background:rgba(255,71,87,0.12);color:var(--danger);}
+.badge.pending{background:rgba(240,165,0,0.12);color:var(--warn);}
+.badge.waiting{background:rgba(72,79,88,0.2);color:var(--text3);}
+.divider{border:none;border-top:1px solid var(--border);margin:14px 0;}
+.stat-row{display:flex;justify-content:space-between;padding:3px 22px;}
+.stat-label{font-size:10px;color:var(--text2);}
+.stat-val{font-size:13px;font-weight:700;font-family:'Syne',sans-serif;}
+.content{padding:26px 30px;overflow-y:auto;}
+.content-title{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.5px;}
+.content-meta{display:flex;align-items:center;gap:9px;margin-top:5px;flex-wrap:wrap;}
+.meta-chip{font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid var(--border2);color:var(--text2);background:var(--surface2);}
+.tabs{display:flex;border-bottom:1px solid var(--border);margin:18px 0 16px;}
+.tab{padding:8px 13px;font-size:11px;background:none;border:none;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.12s;font-family:inherit;font-weight:500;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.approval-zone{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:18px;margin-top:20px;}
+.approval-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;margin-bottom:14px;}
+.resume-box{background:rgba(0,153,255,0.05);border:1px solid rgba(0,153,255,0.2);border-radius:7px;padding:13px 16px;margin-bottom:13px;}
+.resume-label{font-size:9px;color:var(--accent2);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;}
+.text-input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:7px 11px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;transition:border-color 0.12s;}
+.text-input:focus{outline:none;border-color:var(--accent2);}
+.input-hint{font-size:9px;color:var(--text3);margin-top:4px;}
+.feedback-label{font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+textarea.text-input{resize:vertical;min-height:65px;}
+.action-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;}
+.btn{display:flex;align-items:center;gap:7px;padding:9px 18px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s;}
+.btn-approve{background:var(--accent);color:var(--bg);}
+.btn-approve:hover{background:#00cc6e;box-shadow:0 4px 18px rgba(0,255,136,0.25);transform:translateY(-1px);}
+.btn-reject{background:transparent;color:var(--danger);border:1px solid var(--danger);}
+.btn-reject:hover{background:rgba(255,71,87,0.08);transform:translateY(-1px);}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none!important;box-shadow:none!important;}
+.action-hint{margin-left:auto;font-size:9px;color:var(--text3);}
+.state-approved{border-color:rgba(0,255,136,0.25)!important;background:rgba(0,255,136,0.03)!important;}
+.state-rejected{border-color:rgba(255,71,87,0.25)!important;background:rgba(255,71,87,0.03)!important;}
+.done-row{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;}
+.feedback-note{margin-top:10px;padding:8px 12px;background:var(--surface2);border-radius:5px;font-size:11px;color:var(--text2);}
+.banner{padding:10px 14px;border-radius:6px;font-size:11px;margin-bottom:14px;display:flex;align-items:center;gap:8px;animation:fadeIn 0.25s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+.banner.success{background:rgba(0,255,136,0.07);border:1px solid rgba(0,255,136,0.2);color:var(--accent);}
+.banner.error{background:rgba(255,71,87,0.07);border:1px solid rgba(255,71,87,0.2);color:var(--danger);}
+.banner.info{background:rgba(0,153,255,0.07);border:1px solid rgba(0,153,255,0.2);color:var(--accent2);}
+.empty-state{text-align:center;padding:70px 40px;color:var(--text3);}
+.empty-icon{font-size:44px;margin-bottom:14px;opacity:0.25;}
+.empty-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--text2);margin-bottom:6px;}
+.empty-sub{font-size:11px;line-height:1.8;max-width:380px;margin:0 auto;}
+.config-panel{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;display:none;gap:18px;align-items:flex-end;flex-wrap:wrap;}
+.config-panel.open{display:flex;}
+.config-group{display:flex;flex-direction:column;gap:5px;}
+.config-label-sm{font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;}
+.inject-btns{display:flex;gap:6px;flex-wrap:wrap;}
+.inject-btn{background:var(--surface2);border:1px solid var(--border2);color:var(--text2);font-size:9px;padding:5px 9px;border-radius:4px;cursor:pointer;font-family:inherit;transition:all 0.12s;}
+.inject-btn:hover{border-color:var(--accent);color:var(--accent);}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-size:11px;z-index:9999;max-width:280px;display:none;}
+/* AI render loading */
+.ai-loading{display:flex;align-items:center;gap:12px;padding:40px 20px;color:var(--text3);font-size:12px;}
+.ai-spinner{width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ai-rendered{animation:fadeIn 0.3s ease;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:var(--surface);}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">AI</div>
+    <div>
+      <div class="logo-text">SDLC Control Tower</div>
+      <div class="logo-sub">Human-in-the-Loop Approval Pipeline</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <button onclick="toggleConfig()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);font-size:10px;padding:6px 12px;border-radius:5px;cursor:pointer;font-family:inherit">⚙ Config</button>
+    <div class="pulse">
+      <div class="pulse-dot"></div>
+      <span id="poll-status">connecting...</span>
+    </div>
+  </div>
+</header>
+
+<div class="config-panel" id="config-panel">
+  <div class="config-group" style="flex:1">
+    <div class="config-label-sm">Inject Sample Data (offline preview)</div>
+    <div class="inject-btns" id="inject-btns"></div>
+  </div>
+</div>
+
+<div class="pipeline"><div class="pipeline-track" id="pipeline-track"></div></div>
+
+<div class="main">
+  <aside class="sidebar">
+    <div style="padding:0 7px 8px">
+      <div class="sidebar-label">Pipeline Stages</div>
+      <div id="stage-list"></div>
+    </div>
+    <hr class="divider">
+    <div class="sidebar-label" style="padding:0 16px 7px">Summary</div>
+    <div id="stats-panel"></div>
+    <hr class="divider">
+    <div class="sidebar-label" style="padding:0 16px 7px">n8n Integration</div>
+    <div style="padding:0 16px;font-size:10px;color:var(--text3);line-height:2.1">
+      After each stage node:<br>
+      1. HTTP Request → POST /dashboard/stage<br>
+      2. Wait node (POST, On Webhook Call)<br>
+      3. Review → Approve / Reject<br>
+      4. n8n resumes automatically
+    </div>
+  </aside>
+  <main class="content" id="content-area"></main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var STAGES=[
+  {id:'brd',         label:'BRD',          icon:'📋',num:'01'},
+  {id:'prd',         label:'PRD',           icon:'📄',num:'02'},
+  {id:'architecture',label:'Architecture',  icon:'🏗️', num:'03'},
+  {id:'sprint_plan', label:'Sprint Plan',   icon:'🗂️', num:'04'},
+  {id:'scaffold',    label:'Scaffold/Code', icon:'💻',num:'05'},
+  {id:'test_results',label:'Test Results',  icon:'🧪',num:'06'},
+];
+
+var SAMPLE={
+  brd:{status:'BRD_GENERATED',blueprint:{DocumentTitle:'Business Requirements Document - Stock Trading Dashboard',Version:'1.0',BusinessObjectives:['Provide real-time market visibility','Enable mock trading without financial risk','Increase engagement through watchlist and alerts'],Scope:{InScope:['Ticker search','Real-time price display','Watchlist','Mock orders','Portfolio summary'],OutOfScope:['Live trading','Mobile app','User authentication']},FunctionalRequirements:[{ID:'FR1',Title:'Stock Search',Description:'Search by ticker symbol',Priority:'High'},{ID:'FR2',Title:'Real-Time Display',Description:'Price, high, low, volume refreshed every 5s',Priority:'High'},{ID:'FR3',Title:'Watchlist',Description:'Add/remove stocks, session-scoped',Priority:'Medium'}],NonFunctionalRequirements:[{ID:'NFR1',Title:'Performance',Description:'Max 5s data latency'},{ID:'NFR2',Title:'Security',Description:'HTTPS, no persistent personal data'}]}},
+  prd:{status:'PRD_GENERATED',projectTitle:'Stock Trading Dashboard',productVision:'Web-based dashboard for investors to monitor stocks and simulate trading.',functionalRequirements:[{id:'FR001',title:'Stock Search',description:'Search by ticker',priority:'High',acceptanceCriteria:['Valid ticker returns data','Invalid shows error']},{id:'FR002',title:'Real-Time Display',description:'Live price updates',priority:'High',acceptanceCriteria:['Updates every 5s']}],deliveryMilestones:[{milestone:'Sprint 1 — Search & Display',targetDate:'2026-03-22'},{milestone:'Sprint 2 — Orders & Watchlist',targetDate:'2026-03-29'}]},
+  architecture:{status:'ARCHITECTURE_GENERATED',nodes:[{id:'API_GW',name:'API Gateway',type:'service',zone:'core'},{id:'STOCK_SVC',name:'Stock Service',type:'service',zone:'core'},{id:'SESSION_DB',name:'Session Store',type:'database',zone:'core'}],edges:[{source:'API_GW',target:'STOCK_SVC',protocol:'REST'},{source:'STOCK_SVC',target:'SESSION_DB',protocol:'internal'}]},
+  sprint_plan:{status:'SPRINT_PLAN_GENERATED',project:'DEV',sprint_duration:'2 weeks',epics:[{title:'Stock Module',stories:[{title:'Stock search endpoint',story_points:5,acceptance_criteria:['Returns OHLCV','Invalid returns 422']}]},{title:'Order Module',stories:[{title:'Mock order placement',story_points:5,acceptance_criteria:['Records with timestamp','History sorted newest-first']}]}]},
+  scaffold:{status:'FILE_GENERATED',files:[{file_path:'src/stock_service.py',content:'from fastapi import APIRouter\nrouter = APIRouter()\n\n@router.post("/stock/search")\ndef search(payload: dict):\n    return {"ticker": payload["ticker"], "price": 150.0}'},{file_path:'src/routes/orders.py',content:'from fastapi import APIRouter\nrouter = APIRouter()\n_orders=[]\n\n@router.post("/order/place")\ndef place(payload: dict):\n    _orders.insert(0, payload)\n    return {"status":"ok"}'}]},
+  test_results:{status:'COVERAGE_BELOW_THRESHOLD',total:17,passed:5,failed:12,coverage:30,test_file:'tests/test_api.py',failed_tests:[{name:'test_search_valid',error:'assert 404 == 200'},{name:'test_place_order',error:'assert 404 == 200'}],passed_tests:[{name:'test_health'},{name:'test_brd_endpoint'}],coverage_by_file:[{file:'sdlc_api.py',coverage:68},{file:'stock_service.py',coverage:22}]}
+};
+
+var appState={
+  active:'brd',
+  banners:{},
+  renderCache:{},  // stageId -> rendered HTML, so we never call AI twice
+  stages:{
+    brd:         {status:'pending', data:SAMPLE.brd,  resumeUrl:'',timestamp:new Date().toISOString()},
+    prd:         {status:'waiting',data:null,          resumeUrl:'',timestamp:null},
+    architecture:{status:'waiting',data:null,          resumeUrl:'',timestamp:null},
+    sprint_plan: {status:'waiting',data:null,          resumeUrl:'',timestamp:null},
+    scaffold:    {status:'waiting',data:null,          resumeUrl:'',timestamp:null},
+    test_results:{status:'waiting',data:null,          resumeUrl:'',timestamp:null},
+  }
+};
+
+function timeAgo(iso){if(!iso)return'—';var d=Date.now()-new Date(iso).getTime(),m=Math.floor(d/60000);if(m<1)return'just now';if(m<60)return m+'m ago';return Math.floor(m/60)+'h ago';}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function showToast(msg,type){
+  var t=document.getElementById('toast');
+  var bc={success:'rgba(0,255,136,0.3)',error:'rgba(255,71,87,0.3)',info:'rgba(0,153,255,0.3)'};
+  var tc={success:'var(--accent)',error:'var(--danger)',info:'var(--accent2)'};
+  t.style.borderColor=bc[type]||bc.info;t.style.color=tc[type]||tc.info;
+  t.textContent=(type==='success'?'✓ ':type==='error'?'✗ ':'ℹ ')+msg;
+  t.style.display='block';clearTimeout(t._t);t._t=setTimeout(function(){t.style.display='none';},4000);
+}
+
+// ── AI RENDER ─────────────────────────────────────────────────────────────────
+function loadReadableView(stageId, data, containerId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Already cached — show instantly
+  if (appState.renderCache[stageId]) {
+    container.innerHTML = '<div class="ai-rendered">'+appState.renderCache[stageId]+'</div>';
+    return;
+  }
+
+  // Show loading spinner
+  container.innerHTML = '<div class="ai-loading"><div class="ai-spinner"></div><span>Rendering with AI...</span></div>';
+
+  fetch('http://localhost:8000/dashboard/render', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({stage: stageId, data: data})
+  })
+  .then(function(res){ return res.json(); })
+  .then(function(result){
+    appState.renderCache[stageId] = result.html;
+    container.innerHTML = '<div class="ai-rendered">'+result.html+'</div>';
+  })
+  .catch(function(e){
+    container.innerHTML = '<div style="color:var(--danger);padding:20px;font-size:12px">Failed to render: '+esc(e.message)+'</div>';
+  });
+}
+
+// ── CORE RENDER ───────────────────────────────────────────────────────────────
+function render(){renderPipeline();renderSidebar();renderStats();renderContent();}
+
+function renderPipeline(){
+  var h='';
+  STAGES.forEach(function(s,i){
+    var sd=appState.stages[s.id];
+    h+='<div class="pipe-stage '+(appState.active===s.id?'active':'')+'" onclick="setStage(\''+s.id+'\')">';
+    h+='<div class="pipe-dot '+sd.status+'"></div><span class="pipe-name">'+s.label+'</span></div>';
+    if(i<STAGES.length-1)h+='<div class="pipe-arrow">→</div>';
+  });
+  document.getElementById('pipeline-track').innerHTML=h;
+}
+
+function renderSidebar(){
+  var h='';
+  STAGES.forEach(function(s){
+    var sd=appState.stages[s.id];
+    h+='<div class="stage-item '+(appState.active===s.id?'active':'')+'" onclick="setStage(\''+s.id+'\')">';
+    h+='<div class="stage-num">'+s.num+'</div><div class="stage-info"><div class="stage-title">'+s.icon+' '+s.label+'</div><div class="stage-time">'+timeAgo(sd.timestamp)+'</div></div>';
+    h+='<span class="badge '+sd.status+'">'+sd.status+'</span></div>';
+  });
+  document.getElementById('stage-list').innerHTML=h;
+}
+
+function renderStats(){
+  var vals=Object.values(appState.stages);
+  var rows=[
+    {label:'Approved',val:vals.filter(function(s){return s.status==='approved';}).length,color:'var(--accent)'},
+    {label:'Pending', val:vals.filter(function(s){return s.status==='pending';}).length, color:'var(--warn)'},
+    {label:'Rejected',val:vals.filter(function(s){return s.status==='rejected';}).length,color:'var(--danger)'},
+    {label:'Waiting', val:vals.filter(function(s){return s.status==='waiting';}).length, color:'var(--text3)'},
+  ];
+  var h='';rows.forEach(function(r){h+='<div class="stat-row"><span class="stat-label">'+r.label+'</span><span class="stat-val" style="color:'+r.color+'">'+r.val+'</span></div>';});
+  document.getElementById('stats-panel').innerHTML=h;
+}
+
+function renderContent(){
+  var stage=STAGES.find(function(s){return s.id===appState.active;});
+  var sd=appState.stages[appState.active];
+  var banner=appState.banners[appState.active];
+  var ca=document.getElementById('content-area');
+
+  var h='<div style="margin-bottom:20px"><div class="content-title">'+stage.icon+' '+stage.label+'</div>';
+  h+='<div class="content-meta"><span class="meta-chip">Stage '+stage.num+' / 06</span>';
+  h+='<span class="badge '+sd.status+'" style="font-size:10px;padding:3px 8px">'+sd.status.toUpperCase()+'</span>';
+  if(sd.timestamp)h+='<span class="meta-chip">'+timeAgo(sd.timestamp)+'</span>';
+  h+='</div></div>';
+
+  if(banner)h+='<div class="banner '+banner.type+'">'+(banner.type==='success'?'✓':banner.type==='error'?'✗':'ℹ')+' '+esc(banner.msg)+'</div>';
+
+  if(sd.status==='waiting'){
+    h+='<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Awaiting n8n Output</div><div class="empty-sub">Waiting for n8n to POST this stage\'s data.</div></div>';
+    ca.innerHTML=h;return;
+  }
+
+  // Tabs
+  h+='<div class="tabs">';
+  h+='<button class="tab active" id="tbtn-readable" onclick="switchTab(\'readable\',\''+appState.active+'\')">👁 Readable View</button>';
+  h+='<button class="tab" id="tbtn-raw" onclick="switchTab(\'raw\',\''+appState.active+'\')">{ } Raw JSON</button>';
+  h+='</div>';
+
+  // Readable tab — container div, AI will fill it
+  h+='<div id="tab-readable"><div id="ai-render-container"></div></div>';
+
+  // Raw tab
+  h+='<div id="tab-raw" style="display:none">';
+  h+='<pre style="font-size:12px;line-height:1.8;color:var(--text2);white-space:pre-wrap;word-break:break-all;background:var(--surface2);padding:16px;border-radius:8px;border:1px solid var(--border)">'+esc(JSON.stringify(sd.data,null,2))+'</pre>';
+  h+='</div>';
+
+  h+=buildApprovalZone(stage,sd);
+  ca.innerHTML=h;
+
+  // Trigger AI render after DOM is ready
+  loadReadableView(appState.active, sd.data, 'ai-render-container');
+}
+
+function buildApprovalZone(stage,sd){
+  if(sd.status==='approved')return'<div class="approval-zone state-approved"><div class="done-row" style="color:var(--accent)"><span style="font-size:18px">✓</span> Stage Approved<span style="margin-left:auto;font-size:10px;color:var(--text3)">'+timeAgo(sd.approvedAt)+'</span></div>'+(sd.feedback?'<div class="feedback-note">💬 '+esc(sd.feedback)+'</div>':'')+'</div>';
+  if(sd.status==='rejected')return'<div class="approval-zone state-rejected"><div class="done-row" style="color:var(--danger)"><span style="font-size:18px">✗</span> Stage Rejected</div>'+(sd.feedback?'<div class="feedback-note">💬 '+esc(sd.feedback)+'</div>':'')+'</div>';
+  return'<div class="approval-zone"><div class="approval-title">Review &amp; Approve</div>'+
+    '<div class="resume-box"><div class="resume-label">⚡ n8n Resume URL</div>'+
+    '<input class="text-input" id="resume-'+stage.id+'" placeholder="https://your-n8n/webhook/xxx/waiting" value="'+esc(sd.resumeUrl||'')+'">'+
+    '<div class="input-hint">n8n execution panel → Wait node → copy resume URL → paste here</div></div>'+
+    '<div class="feedback-label">Feedback / Notes (optional)</div>'+
+    '<textarea class="text-input" id="feedback-'+stage.id+'" placeholder="Add change requests or rejection reason..."></textarea>'+
+    '<div class="action-row">'+
+    '<button class="btn btn-approve" id="abtn-'+stage.id+'" onclick="doApprove(\''+stage.id+'\')">✓ Approve &amp; Continue</button>'+
+    '<button class="btn btn-reject" id="rbtn-'+stage.id+'" onclick="doReject(\''+stage.id+'\')">✗ Reject</button>'+
+    '<span class="action-hint">Approve calls resume URL → n8n resumes</span>'+
+    '</div></div>';
+}
+
+function switchTab(name, stageId){
+  var readEl=document.getElementById('tab-readable');
+  var rawEl=document.getElementById('tab-raw');
+  var rBtn=document.getElementById('tbtn-readable');
+  var rawBtn=document.getElementById('tbtn-raw');
+  if(name==='readable'){
+    if(readEl)readEl.style.display='block';
+    if(rawEl)rawEl.style.display='none';
+    if(rBtn)rBtn.classList.add('active');
+    if(rawBtn)rawBtn.classList.remove('active');
+  } else {
+    if(readEl)readEl.style.display='none';
+    if(rawEl)rawEl.style.display='block';
+    if(rBtn)rBtn.classList.remove('active');
+    if(rawBtn)rawBtn.classList.add('active');
+  }
+}
+
+function setStage(id){
+  appState.active=id;
+  render();
+}
+
+function toggleConfig(){document.getElementById('config-panel').classList.toggle('open');}
+
+function injectStage(stageId){
+  delete appState.renderCache[stageId]; // clear cache so AI re-renders
+  appState.stages[stageId]={status:'pending',data:SAMPLE[stageId],resumeUrl:'',timestamp:new Date().toISOString()};
+  delete appState.banners[stageId];
+  appState.active=stageId;
+  showToast(stageId+' sample data injected','info');
+  render();
+}
+
+function doApprove(stageId){
+  var resumeEl=document.getElementById('resume-'+stageId);
+  var feedbackEl=document.getElementById('feedback-'+stageId);
+  var resumeUrl=resumeEl?resumeEl.value.trim():'';
+  var feedback=feedbackEl?feedbackEl.value.trim():'';
+  var abtn=document.getElementById('abtn-'+stageId),rbtn=document.getElementById('rbtn-'+stageId);
+  if(abtn)abtn.disabled=true;if(rbtn)rbtn.disabled=true;
+
+  function finish(bt,bm){
+    appState.stages[stageId].status='approved';
+    appState.stages[stageId].feedback=feedback;
+    appState.stages[stageId].approvedAt=new Date().toISOString();
+    appState.banners[stageId]={type:bt,msg:bm};
+    showToast(stageId+' approved ✓','success');
+    var idx=STAGES.findIndex(function(s){return s.id===stageId;});
+    if(idx<STAGES.length-1)setTimeout(function(){appState.active=STAGES[idx+1].id;render();},700);
+    else render();
+  }
+
+  if(resumeUrl&&resumeUrl.indexOf('http')===0){
+    fetch(resumeUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,feedback:feedback,stage:stageId})})
+    .then(function(){finish('success','n8n resume URL called — workflow continuing.');})
+    .catch(function(e){finish('error','Could not reach resume URL: '+e.message);});
+  } else {
+    finish('info','No resume URL — stage approved locally.');
+  }
+}
+
+function doReject(stageId){
+  var resumeEl=document.getElementById('resume-'+stageId);
+  var feedbackEl=document.getElementById('feedback-'+stageId);
+  var resumeUrl=resumeEl?resumeEl.value.trim():'';
+  var feedback=feedbackEl?feedbackEl.value.trim():'';
+  function finish(){
+    appState.stages[stageId].status='rejected';
+    appState.stages[stageId].feedback=feedback;
+    appState.banners[stageId]={type:'error',msg:'Stage rejected. Fix issues and re-trigger in n8n.'};
+    showToast(stageId+' rejected','error');
+    render();
+  }
+  if(resumeUrl&&resumeUrl.indexOf('http')===0){
+    fetch(resumeUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:false,feedback:feedback,stage:stageId})}).then(finish).catch(finish);
+  } else {finish();}
+}
+
+// ── AUTO-POLL ─────────────────────────────────────────────────────────────────
+function startPolling(){
+  setInterval(function(){
+    fetch('http://localhost:8000/dashboard/state')
+      .then(function(res){return res.json();})
+      .then(function(serverState){
+        var updated=false;
+        Object.keys(serverState).forEach(function(stageId){
+          var incoming=serverState[stageId];
+          var local=appState.stages[stageId];
+          if(incoming&&local&&local.status!=='approved'&&local.status!=='rejected'){
+            if(incoming.timestamp!==local.timestamp){
+              delete appState.renderCache[stageId]; // clear cache — new data arrived
+              appState.stages[stageId]={status:incoming.status||'pending',data:incoming.data,resumeUrl:incoming.resumeUrl||'',timestamp:incoming.timestamp};
+              updated=true;
+            }
+          }
+        });
+        if(updated){
+          render();
+          showToast('New stage data received from n8n','info');
+        }
+        document.getElementById('poll-status').textContent='live · '+new Date().toLocaleTimeString();
+      })
+      .catch(function(){
+        document.getElementById('poll-status').textContent='offline';
+      });
+  },5000);
+}
+
+// Build inject buttons
+var injH='';
+STAGES.forEach(function(s){injH+='<button class="inject-btn" onclick="injectStage(\''+s.id+'\')">'+s.icon+' '+s.label+'</button>';});
+document.getElementById('inject-btns').innerHTML=injH;
+
+render();
+startPolling();
+</script>
+</body>
+</html>
