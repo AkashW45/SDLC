@@ -156,14 +156,11 @@ Generate architecture JSON with:
     result = call_llm(system_prompt, user_prompt)
 
     # Deterministic validation
-    valid_nodes = []
-    for node in result.get("nodes", []):
-        if node.get("traced_to") in canonical["functional_requirements"] \
-           or node.get("traced_to") in canonical["non_functional_requirements"]:
-            valid_nodes.append(node)
-
-    result["nodes"] = valid_nodes
-
+    if not isinstance(result, dict):
+        result = {"nodes": [], "edges": []}
+    result.setdefault("nodes", [])
+    result.setdefault("edges", [])
+    
     return result
 
 def extract_text_fields(obj):
@@ -415,16 +412,16 @@ def build_sprint_plan(
                 }
             })
 
-        for story in epic.get("stories", []):
+            for story in epic.get("stories", []):
     # Format acceptance criteria into description
-            ac_list = story.get("acceptance_criteria", [])
-            ac_text = ""
-            if ac_list:
-               ac_text = "\n\nAcceptance Criteria:\n" + "\n".join(f"- {ac}" for ac in ac_list)
+                ac_list = story.get("acceptance_criteria", [])
+                ac_text = ""
+                if ac_list:
+                   ac_text = "\n\nAcceptance Criteria:\n" + "\n".join(f"- {ac}" for ac in ac_list)
     
-            full_description = story["description"] + ac_text
+                full_description = story["description"] + ac_text
     
-            fields = {
+                fields = {
         "project": {"key": project_key},
         "summary": story["title"],
         "description": full_description,  # AC embedded in description
@@ -433,10 +430,10 @@ def build_sprint_plan(
         "labels": ["product"]
     }
     
-            if story_points_field and story.get("story_points") is not None:
-               fields[story_points_field] = story.get("story_points")
+                if story_points_field and story.get("story_points") is not None:
+                  fields[story_points_field] = story.get("story_points")
     
-            flat_tickets.append({"fields": fields})
+                flat_tickets.append({"fields": fields})
 
     except Exception as e:
         import traceback

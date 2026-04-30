@@ -9,6 +9,8 @@ class SingleTicketInput(BaseModel):
     data_models: Dict[str, Any]
     generated_so_far: List[str] = []
     repo_tree_snapshot: List[str] = []
+    repo_url: str = ""
+    branch_name: str = ""
 
 
 class GeneratedFile(BaseModel):
@@ -18,19 +20,17 @@ class GeneratedFile(BaseModel):
     todos: List[str] = []
 
 
-
 class SprintExecutionRequest(BaseModel):
     repo_url: str
     branch_name: str
     tickets: list
     architecture: dict
-
-    mode: Literal["bootstrap", "update", "preview"]= "bootstrap"
+    mode: Literal["bootstrap", "update", "preview"] = "bootstrap"
 
 class TestGenerationRequest(BaseModel):
     repo_url: str
     branch_name: str
     ticket_id: str
     file_patches: list = []
-    acceptance_criteria: list[str]=[]
-    mode: Literal["bootstrap", "update","preview"] = "bootstrap"    
+    acceptance_criteria: list[str] = []
+    mode: Literal["bootstrap", "update", "preview"] = "bootstrap"
