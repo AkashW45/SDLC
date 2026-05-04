@@ -3,7 +3,6 @@ from pydantic import BaseModel, Field, validator
 import re 
 import os
 import json
-
 from groq import Groq
 import os
 
